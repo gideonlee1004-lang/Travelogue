@@ -1,8 +1,44 @@
 // Read the JSON *and* its current ETag from the same private Blob revision.
 // `head()` reads origin metadata while an ordinary `get()` can see stale CDN
 // content. A stale ETag must never be paired with a new one when saving trips.
-export class SnapshotChangedError extends Error {}
+export class SnapshotChangedError extends Error {
+  constructor(message, diagnostic = {}) {
+    super(message);
+    this.diagnostic = diagnostic;
+  }
+}
 export class SnapshotReadError extends Error {}
+
+// Vercel's metadata API and the private Blob HTTP endpoint can represent
+// the same *strong* ETag with or without surrounding quotes. Match the tag
+// token, but ALWAYS pass the unchanged metadata ETag to put({ ifMatch }).
+// Weak ETags deliberately cannot be treated as matching strong validators.
+export function strongEtagToken(value) {
+  if (typeof value !== 'string') return null;
+  const etag = value.trim();
+  if (!etag || /^W\//i.test(etag)) return null;
+  if (etag.startsWith('"') !== etag.endsWith('"')) return null;
+  const token = etag.startsWith('"') ? etag.slice(1, -1) : etag;
+  return token && !/["\r\n]/.test(token) ? token : null;
+}
+
+function etagShape(etag) {
+  return {
+    present: typeof etag === 'string' && etag.length > 0,
+    length: typeof etag === 'string' ? etag.length : 0,
+    quoted: typeof etag === 'string' && etag.startsWith('"') && etag.endsWith('"'),
+    weak: typeof etag === 'string' && /^W\//i.test(etag)
+  };
+}
+
+function cacheSignals(response) {
+  const age = response.headers?.get('age');
+  const cache = response.headers?.get('x-vercel-cache') || response.headers?.get('cf-cache-status');
+  return {
+    cacheAgeSeconds: age && /^\d+$/.test(age) ? Number(age) : null,
+    cacheStatus: /^(HIT|MISS|STALE|BYPASS|DYNAMIC)$/i.test(cache || '') ? cache.toUpperCase() : null
+  };
+}
 
 // Injectable dependencies allow verifying these safety guarantees without
 // requiring access to a user's Vercel Blob store in the automated tests.
@@ -51,14 +87,22 @@ export async function readVerifiedBlobSnapshot(pathname, { token, headFn, fetchF
   if (!response.ok) throw new SnapshotReadError(`Latest Blob read failed (HTTP ${response.status}).`);
 
   const downloadedEtag = response.headers.get('etag');
-  if (!downloadedEtag || downloadedEtag !== meta.etag) {
-    // It is unsafe to combine cached JSON with the ETag from head().
-    // The caller will re-read, not perform a speculative write.
-    throw new SnapshotChangedError('Blob content and metadata refer to different revisions.');
+  const metadataToken = strongEtagToken(meta.etag);
+  const contentToken = strongEtagToken(downloadedEtag);
+  if (!metadataToken || metadataToken !== contentToken) {
+    // Diagnose without logging blob paths, raw ETags, data, or tokens.
+    // If these are truly different revisions, the safe action is NOT to write.
+    throw new SnapshotChangedError('Blob content and metadata refer to different revisions.', {
+      mismatch: !contentToken ? 'missing_or_weak_content_etag' : 'different_etag_values',
+      metadataTag: etagShape(meta.etag),
+      contentTag: etagShape(downloadedEtag),
+      ...cacheSignals(response)
+    });
   }
 
   try {
-    return { value: JSON.parse(await response.text()), etag: downloadedEtag };
+    // Preserve the exact validator from head(), not the HTTP header's formatting.
+    return { value: JSON.parse(await response.text()), etag: meta.etag };
   } catch {
     throw new SnapshotReadError('The saved Blob content is not valid JSON.');
   }

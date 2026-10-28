@@ -103,7 +103,7 @@ export async function updateJson(pathname, mutate, retries = 6) {
       if (!(err instanceof SnapshotChangedError)) throw err;
       reasons.inconsistent_read = (reasons.inconsistent_read || 0) + 1;
       console.warn('[Travelogue] Blob snapshot changed during read', {
-        recordType, attempt: i + 1
+        recordType, attempt: i + 1, ...(err.diagnostic || {})
       });
       continue;
     }

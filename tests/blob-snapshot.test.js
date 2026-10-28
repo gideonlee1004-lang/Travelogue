@@ -67,3 +67,35 @@ test('rejects untrusted blob metadata URL before transmitting token', async () =
   }), SnapshotReadError);
   assert.equal(called, false);
 });
+
+
+test('accepts matching strong ETags with different quotation styles', async () => {
+  const snapshot = await readVerifiedBlobSnapshot('trips/u1.json', {
+    token: 'test', headFn: async () => metadata('"revision2"'),
+    fetchFn: async () => content('revision2')
+  });
+  assert.equal(snapshot.etag, '"revision2"');
+});
+
+test('does not accept weak ETag as a strong ETag', async () => {
+  await assert.rejects(() => readVerifiedBlobSnapshot('trips/u1.json', {
+    token: 'test', headFn: async () => metadata('"revision2"'),
+    fetchFn: async () => content('W/"revision2"')
+  }), err => {
+    assert.ok(err instanceof SnapshotChangedError);
+    assert.equal(err.diagnostic.contentTag.weak, true);
+    return true;
+  });
+});
+
+test('mismatched revisions include safe non-content diagnostics', async () => {
+  await assert.rejects(() => readVerifiedBlobSnapshot('trips/u1.json', {
+    token: 'test', headFn: async () => metadata('"revision2"'),
+    fetchFn: async () => content('"revision1"')
+  }), err => {
+    assert.ok(err instanceof SnapshotChangedError);
+    assert.equal(err.diagnostic.mismatch, 'different_etag_values');
+    assert.ok(!JSON.stringify(err.diagnostic).includes('revision'));
+    return true;
+  });
+});
