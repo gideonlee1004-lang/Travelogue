@@ -9,10 +9,13 @@ export class SnapshotChangedError extends Error {
 }
 export class SnapshotReadError extends Error {}
 
-// Vercel's metadata API and the private Blob HTTP endpoint can represent
-// the same *strong* ETag with or without surrounding quotes. Match the tag
-// token, but ALWAYS pass the unchanged metadata ETag to put({ ifMatch }).
-// Weak ETags deliberately cannot be treated as matching strong validators.
+// Vercel Blob metadata returns a strong ETag (e.g. "abc"), while the private
+// content endpoint may return a weak form (W/"abc") of that same identifier.
+// For a *fresh, cache-bypassed read of the same Blob*, compare the opaque
+// identifiers, but ALWAYS use the original strong HEAD ETag for ifMatch.
+// A weak HTTP ETag is NEVER suitable as an If-Match write precondition.
+// Different identifiers, malformed validators and weak HEAD values all fail
+// closed rather than risking an overwrite of a different revision.
 export function strongEtagToken(value) {
   if (typeof value !== 'string') return null;
   const etag = value.trim();
@@ -20,6 +23,20 @@ export function strongEtagToken(value) {
   if (etag.startsWith('"') !== etag.endsWith('"')) return null;
   const token = etag.startsWith('"') ? etag.slice(1, -1) : etag;
   return token && !/["\r\n]/.test(token) ? token : null;
+}
+
+// Accept a weak validator ONLY for comparing an origin GET's identifier with
+// the strong identifier returned by head(). This is NOT HTTP strong equality.
+// The strong HEAD ETag remains the only validator used for a conditional PUT.
+export function contentEtagToken(value) {
+  if (typeof value !== 'string') return null;
+  const tag = value.trim();
+  if (/^W\//i.test(tag)) {
+    // A weak HTTP ETag has the form W/"opaque-token" (not W/token).
+    if (!/^W\/"[^"\r\n]+"$/i.test(tag)) return null;
+    return strongEtagToken(tag.slice(2));
+  }
+  return strongEtagToken(tag);
 }
 
 function etagShape(etag) {
@@ -88,12 +105,13 @@ export async function readVerifiedBlobSnapshot(pathname, { token, headFn, fetchF
 
   const downloadedEtag = response.headers.get('etag');
   const metadataToken = strongEtagToken(meta.etag);
-  const contentToken = strongEtagToken(downloadedEtag);
-  if (!metadataToken || metadataToken !== contentToken) {
+  const contentToken = contentEtagToken(downloadedEtag);
+  if (!metadataToken || !contentToken || metadataToken !== contentToken) {
     // Diagnose without logging blob paths, raw ETags, data, or tokens.
-    // If these are truly different revisions, the safe action is NOT to write.
+    // Never write when opaque identifiers are missing or disagree.
     throw new SnapshotChangedError('Blob content and metadata refer to different revisions.', {
-      mismatch: !contentToken ? 'missing_or_weak_content_etag' : 'different_etag_values',
+      mismatch: !metadataToken ? 'invalid_metadata_etag' :
+        !contentToken ? 'missing_or_invalid_content_etag' : 'different_etag_values',
       metadataTag: etagShape(meta.etag),
       contentTag: etagShape(downloadedEtag),
       ...cacheSignals(response)
@@ -101,7 +119,7 @@ export async function readVerifiedBlobSnapshot(pathname, { token, headFn, fetchF
   }
 
   try {
-    // Preserve the exact validator from head(), not the HTTP header's formatting.
+    // Only the strong validator from head() can be used as the put() ifMatch.
     return { value: JSON.parse(await response.text()), etag: meta.etag };
   } catch {
     throw new SnapshotReadError('The saved Blob content is not valid JSON.');

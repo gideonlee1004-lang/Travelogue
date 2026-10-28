@@ -77,13 +77,44 @@ test('accepts matching strong ETags with different quotation styles', async () =
   assert.equal(snapshot.etag, '"revision2"');
 });
 
-test('does not accept weak ETag as a strong ETag', async () => {
+test('accepts matching weak GET identifier but returns strong HEAD for ifMatch', async () => {
+  const snapshot = await readVerifiedBlobSnapshot('trips/u1.json', {
+    token: 'test', headFn: async () => metadata('"revision2"'),
+    fetchFn: async () => content('W/"revision2"')
+  });
+  assert.equal(snapshot.etag, '"revision2"');
+  assert.deepEqual(snapshot.value, [{ id: 'trip1' }]);
+});
+
+test('rejects weak GET with a different identifier from strong HEAD', async () => {
   await assert.rejects(() => readVerifiedBlobSnapshot('trips/u1.json', {
     token: 'test', headFn: async () => metadata('"revision2"'),
+    fetchFn: async () => content('W/"revision1"')
+  }), err => {
+    assert.ok(err instanceof SnapshotChangedError);
+    assert.equal(err.diagnostic.mismatch, 'different_etag_values');
+    return true;
+  });
+});
+
+test('rejects weak HEAD because weak ETags cannot be used for ifMatch', async () => {
+  await assert.rejects(() => readVerifiedBlobSnapshot('trips/u1.json', {
+    token: 'test', headFn: async () => metadata('W/"revision2"'),
     fetchFn: async () => content('W/"revision2"')
   }), err => {
     assert.ok(err instanceof SnapshotChangedError);
-    assert.equal(err.diagnostic.contentTag.weak, true);
+    assert.equal(err.diagnostic.mismatch, 'invalid_metadata_etag');
+    return true;
+  });
+});
+
+test('rejects malformed weak content tag', async () => {
+  await assert.rejects(() => readVerifiedBlobSnapshot('trips/u1.json', {
+    token: 'test', headFn: async () => metadata('"revision2"'),
+    fetchFn: async () => content('W/revision2')
+  }), err => {
+    assert.ok(err instanceof SnapshotChangedError);
+    assert.equal(err.diagnostic.mismatch, 'missing_or_invalid_content_etag');
     return true;
   });
 });
