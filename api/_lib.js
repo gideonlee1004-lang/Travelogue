@@ -2,6 +2,7 @@
 // Files starting with "_" inside /api are NOT exposed as routes.
 import crypto from 'node:crypto';
 import { put, get, head, BlobPreconditionFailedError } from '@vercel/blob';
+import { readVerifiedBlobSnapshot, SnapshotChangedError, SnapshotReadError } from './_blobSnapshot.js';
 
 // Your Vercel integration prefix is "TRAVELOGUE_DB", so the token variable is
 // TRAVELOGUE_DB_READ_WRITE_TOKEN (not the default BLOB_READ_WRITE_TOKEN).
@@ -85,50 +86,53 @@ export async function writeJson(pathname, data, { overwrite = true, ifMatch } = 
 
 // Atomic read-modify-write; preserve the original six-attempt behaviour.
 // Diagnose rejected conditional writes without increasing retries or overwriting blindly.
+// Atomic read-modify-write. The six-attempt limit is unchanged (no v2 backoff).
+// Crucially, never use a Blob ETag from a cached GET for a conditional write.
 export async function updateJson(pathname, mutate, retries = 6) {
+  ensureConfigured();
   const recordType = pathname.split('/')[0];
-  const seenEtags = new Set();
   const reasons = {};
-  let lastEtag = null;
   for (let i = 0; i < retries; i++) {
-    const { value, etag } = await readJsonWithMeta(pathname);
-    lastEtag = etag;
-    seenEtags.add(etag === null ? '(missing)' : etag);
+    let snapshot;
+    try {
+      snapshot = await readVerifiedBlobSnapshot(pathname, { token: TOKEN, headFn: head });
+    } catch (err) {
+      if (err instanceof SnapshotReadError) {
+        throw new StoreError(err.message);
+      }
+      if (!(err instanceof SnapshotChangedError)) throw err;
+      reasons.inconsistent_read = (reasons.inconsistent_read || 0) + 1;
+      console.warn('[Travelogue] Blob snapshot changed during read', {
+        recordType, attempt: i + 1
+      });
+      continue;
+    }
+
+    const { value, etag } = snapshot;
     const next = await mutate(value);
     if (next === undefined) return { value, etag };
     try {
-      const written = await writeJson(pathname, next, { overwrite: !!etag, ifMatch: etag });
+      const written = await writeJson(pathname, next, {
+        overwrite: !!etag, ifMatch: etag
+      });
       return { value: next, etag: written.etag };
     } catch (err) {
       if (!(err instanceof ConflictError)) throw err;
-      const key = `${err.blobName || 'unknown'} / HTTP ${err.blobCode ?? '?'} / ${err.blobReason || 'unknown'}`;
-      reasons[key] = (reasons[key] || 0) + 1;
+      const reason = err.blobReason || 'conflict';
+      reasons[reason] = (reasons[reason] || 0) + 1;
       console.warn('[Travelogue] Blob conditional write rejected', {
-        recordType, attempt: i + 1, hadReadEtag: !!etag,
-        blobErrorName: err.blobName, blobHttpStatus: err.blobCode,
-        reason: err.blobReason
+        recordType, attempt: i + 1, reason
       });
     }
   }
-
-  // A head() check helps diagnose whether get() is returning a stale/missing
-  // ETag. This only reads metadata: it never changes or overwrites trip data.
-  let headExists = null;
-  let headMatchesLastRead = null;
-  let headDiagnosticError = null;
-  try {
-    const latest = await head(pathname, { token: TOKEN });
-    headExists = !!latest;
-    headMatchesLastRead = (latest?.etag ?? null) === lastEtag;
-  } catch (err) {
-    headDiagnosticError = String(err?.name || 'UnknownHeadError');
-  }
-  console.warn('[Travelogue] Blob ETag save conflict after retries', {
-    recordType, attempts: retries, uniqueReadETags: seenEtags.size,
-    lastReadHadETag: !!lastEtag, headExists, headMatchesLastRead,
-    headDiagnosticError, reasons
+  console.warn('[Travelogue] Blob write failed after verified reads and retries', {
+    recordType, attempts: retries, reasons
   });
-  throw new ConflictError('Too many concurrent changes. Please try again.');
+  throw new ConflictError(
+    reasons.inconsistent_read
+      ? 'Unable to read a consistent trip revision. Save was prevented to protect your data.'
+      : 'Too many concurrent changes. Please try again.'
+  );
 }
 
 export function sharedPathFor(id) {
