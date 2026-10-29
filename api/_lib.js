@@ -1,8 +1,8 @@
 // Shared server-side helpers for Travelogue (Vercel Serverless Functions).
 // Files starting with "_" inside /api are NOT exposed as routes.
 import crypto from 'node:crypto';
-import { put, get, head, BlobPreconditionFailedError } from '@vercel/blob';
-import { readVerifiedBlobSnapshot, SnapshotChangedError, SnapshotReadError } from './_blobSnapshot.js';
+import { put, get, BlobPreconditionFailedError } from '@vercel/blob';
+import { readConsistentBlobSnapshot, SnapshotReadError } from './_blobSnapshot.js';
 
 // Your Vercel integration prefix is "TRAVELOGUE_DB", so the token variable is
 // TRAVELOGUE_DB_READ_WRITE_TOKEN (not the default BLOB_READ_WRITE_TOKEN).
@@ -26,30 +26,11 @@ function ensureConfigured() {
 
 export async function readJsonWithMeta(pathname) {
   ensureConfigured();
-  let result;
   try {
-    // @vercel/blob >= 2.6.0 supports uncached private reads. Without this,
-    // ETags can be up to 60 seconds stale, making all 6 CAS writes fail.
-    result = await get(pathname, { access: 'private', token: TOKEN, useCache: false });
+    return await readConsistentBlobSnapshot(pathname, { token: TOKEN, getFn: get });
   } catch (err) {
-    if (err?.name === 'BlobNotFoundError') return { value: null, etag: null };
-    throw new StoreError(`Unable to connect to Vercel Blob: ${err?.message || 'unknown error'}`);
-  }
-  if (!result || result.statusCode === 404) return { value: null, etag: null };
-  if (result.statusCode !== 200 || !result.stream) {
-    throw new StoreError(`Unable to read Vercel Blob (HTTP ${result.statusCode}).`);
-  }
-  try {
-    const value = JSON.parse(await new Response(result.stream).text());
-    // The ETag and JSON must come from the *same* origin read. Mixing a
-    // cached JSON value with an ETag from head() could overwrite newer data.
-    const etag = result.blob?.etag;
-    if (!etag) {
-      throw new Error('Blob response has no ETag; verify @vercel/blob >= 2.6.0');
-    }
-    return { value, etag };
-  } catch (err) {
-    throw new StoreError(`Unable to read data from Vercel Blob: ${err?.message || 'invalid data'}`);
+    if (err instanceof SnapshotReadError) throw new StoreError(err.message);
+    throw err;
   }
 }
 
@@ -84,31 +65,15 @@ export async function writeJson(pathname, data, { overwrite = true, ifMatch } = 
   }
 }
 
-// Atomic read-modify-write; preserve the original six-attempt behaviour.
-// Diagnose rejected conditional writes without increasing retries or overwriting blindly.
-// Atomic read-modify-write. The six-attempt limit is unchanged (no v2 backoff).
-// Crucially, never use a Blob ETag from a cached GET for a conditional write.
+// Atomic read-modify-write with optimistic concurrency control.
+// The uncached get() obtains the latest JSON and its ETag in ONE request.
+// Conditional put() ensures another editor cannot be silently overwritten.
 export async function updateJson(pathname, mutate, retries = 6) {
   ensureConfigured();
   const recordType = pathname.split('/')[0];
   const reasons = {};
   for (let i = 0; i < retries; i++) {
-    let snapshot;
-    try {
-      snapshot = await readVerifiedBlobSnapshot(pathname, { token: TOKEN, headFn: head });
-    } catch (err) {
-      if (err instanceof SnapshotReadError) {
-        throw new StoreError(err.message);
-      }
-      if (!(err instanceof SnapshotChangedError)) throw err;
-      reasons.inconsistent_read = (reasons.inconsistent_read || 0) + 1;
-      console.warn('[Travelogue] Blob snapshot changed during read', {
-        recordType, attempt: i + 1, ...(err.diagnostic || {})
-      });
-      continue;
-    }
-
-    const { value, etag } = snapshot;
+    const { value, etag } = await readJsonWithMeta(pathname);
     const next = await mutate(value);
     if (next === undefined) return { value, etag };
     try {
@@ -125,14 +90,10 @@ export async function updateJson(pathname, mutate, retries = 6) {
       });
     }
   }
-  console.warn('[Travelogue] Blob write failed after verified reads and retries', {
+  console.warn('[Travelogue] Blob write conflicts exhausted', {
     recordType, attempts: retries, reasons
   });
-  throw new ConflictError(
-    reasons.inconsistent_read
-      ? 'Unable to read a consistent trip revision. Save was prevented to protect your data.'
-      : 'Too many concurrent changes. Please try again.'
-  );
+  throw new ConflictError('Too many concurrent changes. Please try again.');
 }
 
 export function sharedPathFor(id) {

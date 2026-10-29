@@ -1,132 +1,111 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  readVerifiedBlobSnapshot, SnapshotChangedError, SnapshotReadError
-} from '../api/_blobSnapshot.js';
+import { readConsistentBlobSnapshot, SnapshotReadError } from '../api/_blobSnapshot.js';
 
-const ORIGIN = 'https://store123.private.blob.vercel-storage.com/trips/u1.json';
-const metadata = (etag = '"rev2"') => ({ url: ORIGIN, etag });
-const content = (etag = '"rev2"', value = [{ id: 'trip1' }]) => ({
-  status: 200, ok: true, headers: new Headers({ etag }),
-  text: async () => JSON.stringify(value)
+const trip = [{ id: 'trip1', name: 'Hokkaido' }];
+const result = (body = trip, etag = '"revision-2"') => ({
+  statusCode: 200, blob: { etag },
+  stream: new Response(JSON.stringify(body)).body
+});
+const read = (getFn, extra = {}) => readConsistentBlobSnapshot('trips/user1.json', {
+  token: 'test-token', getFn, waitFn: async () => {}, ...extra
 });
 
-test('uses cache=0 origin read and matching ETag for saved JSON', async () => {
-  let requested;
-  const snapshot = await readVerifiedBlobSnapshot('trips/u1.json', {
-    token: 'test-token', headFn: async () => metadata(),
-    fetchFn: async (url, options) => {
-      requested = { url, options };
-      return content();
+test('consistent GET returns current JSON and its own strong ETag without HEAD', async () => {
+  let called = 0;
+  const data = await read(async (pathname, options) => {
+    called++;
+    assert.equal(pathname, 'trips/user1.json');
+    assert.deepEqual(options, {
+      access: 'private', token: 'test-token', useCache: false
+    });
+    return result();
+  });
+  assert.equal(called, 1);
+  assert.deepEqual(data, { value: trip, etag: '"revision-2"' });
+});
+
+test('missing blob is empty (new user can create a first trip)', async () => {
+  assert.deepEqual(await read(async () => null), { value: null, etag: null });
+  assert.deepEqual(await read(async () => ({ statusCode: 404 })), { value: null, etag: null });
+  assert.deepEqual(await read(async () => {
+    const error = new Error('not found'); error.name = 'BlobNotFoundError'; throw error;
+  }), { value: null, etag: null });
+});
+
+test('retries transient 503 metadata/read errors and succeeds', async () => {
+  let calls = 0;
+  let waits = 0;
+  const data = await read(async () => {
+    calls++;
+    if (calls <= 2) {
+      const error = new Error('Service Unavailable');
+      error.statusCode = 503;
+      throw error;
     }
+    return result();
+  }, { waitFn: async () => { waits++; } });
+  assert.equal(calls, 3);
+  assert.equal(waits, 2);
+  assert.deepEqual(data.value, trip);
+});
+
+test('retries SDK BlobServiceNotAvailable errors without a status code', async () => {
+  let calls = 0;
+  const data = await read(async () => {
+    calls++;
+    if (calls === 1) {
+      const err = new Error('The blob service is currently not available.');
+      err.name = 'BlobServiceNotAvailable';
+      throw err;
+    }
+    return result();
   });
-  assert.deepEqual(snapshot, { value: [{ id: 'trip1' }], etag: '"rev2"' });
-  assert.equal(new URL(requested.url).searchParams.get('cache'), '0');
-  assert.equal(requested.options.cache, 'no-store');
-  assert.equal(requested.options.headers.Authorization, 'Bearer test-token');
+  assert.equal(calls, 2);
+  assert.deepEqual(data.value, trip);
 });
 
-test('rejects stale GET data instead of pairing it with current HEAD ETag', async () => {
-  await assert.rejects(() => readVerifiedBlobSnapshot('trips/u1.json', {
-    token: 'test', headFn: async () => metadata('"rev2"'),
-    fetchFn: async () => content('"rev1"', [{ id: 'older-trip' }])
-  }), SnapshotChangedError);
+test('retries 503 result status then gets good content', async () => {
+  let calls = 0;
+  const data = await read(async () => ++calls === 1 ? { statusCode: 503 } : result());
+  assert.equal(calls, 2);
+  assert.equal(data.etag, '"revision-2"');
 });
 
-test('returns empty record only when metadata confirms it does not exist', async () => {
-  const snapshot = await readVerifiedBlobSnapshot('trips/u1.json', {
-    token: 'test', headFn: async () => {
-      const error = new Error('missing'); error.name = 'BlobNotFoundError'; throw error;
-    },
-    fetchFn: async () => { throw new Error('should not fetch'); }
-  });
-  assert.deepEqual(snapshot, { value: null, etag: null });
+test('permanent 503 fails closed, never returns empty record', async () => {
+  let calls = 0;
+  await assert.rejects(read(async () => {
+    calls++;
+    const error = new Error('unavailable'); error.status = 503; throw error;
+  }), err => err instanceof SnapshotReadError && /503/.test(err.message));
+  assert.equal(calls, 3);
 });
 
-test('does not mistake missing body for absent record', async () => {
-  await assert.rejects(() => readVerifiedBlobSnapshot('trips/u1.json', {
-    token: 'test', headFn: async () => metadata(),
-    fetchFn: async () => ({ status: 404, ok: false })
-  }), SnapshotChangedError);
-});
-
-test('rejects invalid JSON instead of saving over it', async () => {
-  await assert.rejects(() => readVerifiedBlobSnapshot('trips/u1.json', {
-    token: 'test', headFn: async () => metadata(),
-    fetchFn: async () => ({ status: 200, ok: true,
-      headers: new Headers({ etag: '"rev2"' }), text: async () => 'bad json'
-    })
+test('permission error fails without retrying or assuming missing record', async () => {
+  let calls = 0;
+  await assert.rejects(read(async () => {
+    calls++;
+    const error = new Error('Forbidden'); error.statusCode = 403; throw error;
   }), SnapshotReadError);
+  assert.equal(calls, 1);
 });
 
-test('rejects untrusted blob metadata URL before transmitting token', async () => {
+test('never accepts missing or weak ETags for conditional writes', async () => {
+  await assert.rejects(read(async () => ({ ...result(), blob: {} })), SnapshotReadError);
+  await assert.rejects(read(async () => result(trip, 'W/"revision-2"')), SnapshotReadError);
+  await assert.rejects(read(async () => result(trip, '"bad"token"')), SnapshotReadError);
+});
+
+test('invalid JSON prevents saving instead of overwriting existing data', async () => {
+  const broken = {
+    statusCode: 200, blob: { etag: '"revision-2"' },
+    stream: new Response('{not-json').body
+  };
+  await assert.rejects(read(async () => broken), SnapshotReadError);
+});
+
+test('missing token fails without ever calling get()', async () => {
   let called = false;
-  await assert.rejects(() => readVerifiedBlobSnapshot('trips/u1.json', {
-    token: 'secret', headFn: async () => ({ url: 'https://bad.example/track', etag: '"rev2"' }),
-    fetchFn: async () => { called = true; return content(); }
-  }), SnapshotReadError);
+  await assert.rejects(read(async () => { called = true; }, { token: '' }), SnapshotReadError);
   assert.equal(called, false);
-});
-
-
-test('accepts matching strong ETags with different quotation styles', async () => {
-  const snapshot = await readVerifiedBlobSnapshot('trips/u1.json', {
-    token: 'test', headFn: async () => metadata('"revision2"'),
-    fetchFn: async () => content('revision2')
-  });
-  assert.equal(snapshot.etag, '"revision2"');
-});
-
-test('accepts matching weak GET identifier but returns strong HEAD for ifMatch', async () => {
-  const snapshot = await readVerifiedBlobSnapshot('trips/u1.json', {
-    token: 'test', headFn: async () => metadata('"revision2"'),
-    fetchFn: async () => content('W/"revision2"')
-  });
-  assert.equal(snapshot.etag, '"revision2"');
-  assert.deepEqual(snapshot.value, [{ id: 'trip1' }]);
-});
-
-test('rejects weak GET with a different identifier from strong HEAD', async () => {
-  await assert.rejects(() => readVerifiedBlobSnapshot('trips/u1.json', {
-    token: 'test', headFn: async () => metadata('"revision2"'),
-    fetchFn: async () => content('W/"revision1"')
-  }), err => {
-    assert.ok(err instanceof SnapshotChangedError);
-    assert.equal(err.diagnostic.mismatch, 'different_etag_values');
-    return true;
-  });
-});
-
-test('rejects weak HEAD because weak ETags cannot be used for ifMatch', async () => {
-  await assert.rejects(() => readVerifiedBlobSnapshot('trips/u1.json', {
-    token: 'test', headFn: async () => metadata('W/"revision2"'),
-    fetchFn: async () => content('W/"revision2"')
-  }), err => {
-    assert.ok(err instanceof SnapshotChangedError);
-    assert.equal(err.diagnostic.mismatch, 'invalid_metadata_etag');
-    return true;
-  });
-});
-
-test('rejects malformed weak content tag', async () => {
-  await assert.rejects(() => readVerifiedBlobSnapshot('trips/u1.json', {
-    token: 'test', headFn: async () => metadata('"revision2"'),
-    fetchFn: async () => content('W/revision2')
-  }), err => {
-    assert.ok(err instanceof SnapshotChangedError);
-    assert.equal(err.diagnostic.mismatch, 'missing_or_invalid_content_etag');
-    return true;
-  });
-});
-
-test('mismatched revisions include safe non-content diagnostics', async () => {
-  await assert.rejects(() => readVerifiedBlobSnapshot('trips/u1.json', {
-    token: 'test', headFn: async () => metadata('"revision2"'),
-    fetchFn: async () => content('"revision1"')
-  }), err => {
-    assert.ok(err instanceof SnapshotChangedError);
-    assert.equal(err.diagnostic.mismatch, 'different_etag_values');
-    assert.ok(!JSON.stringify(err.diagnostic).includes('revision'));
-    return true;
-  });
 });
