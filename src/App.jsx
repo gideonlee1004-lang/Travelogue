@@ -105,7 +105,7 @@ const saveSharedTrip = (payload) =>
 const loadSharedTrip = (sharedId) =>
   apiRequest(`/api/collaboration?sharedId=${encodeURIComponent(sharedId)}`);
 
-const jsonEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const jsonEqual = (a, b) => a === b || JSON.stringify(a) === JSON.stringify(b);
 const privateTripIndex = trips => trips.map(t => t.sharedId
   ? { id: t.id, sharedId: t.sharedId } : t);
 const indexJSON = trips => JSON.stringify(privateTripIndex(trips));
@@ -113,6 +113,11 @@ const indexJSON = trips => JSON.stringify(privateTripIndex(trips));
 
 const saveUserItineraries = (trips) =>
   apiRequest('/api/trips', { method: 'PUT', body: JSON.stringify({ trips }) });
+
+// Poll returns only updated shared trip bodies; ETags are still verified by the server.
+const pollUserItineraries = knownVersions => apiRequest('/api/trips', {
+  method: 'POST', body: JSON.stringify({ action: 'poll', knownVersions })
+});
 
 // Map pins
 const BLUE_SAVED_PLACE_PIN = {
@@ -584,6 +589,7 @@ export default function App() {
   const tripsRef = useRef([]);
   tripsRef.current = trips;
   const syncedTripsRef = useRef(new Map());
+  const sharedVersionsRef = useRef({});
   const personalIndexRef = useRef('');
   const saveRunningRef = useRef(false);
   const pollRunningRef = useRef(false);
@@ -629,6 +635,7 @@ export default function App() {
       .then(data => {
         if (!active) return;
         syncedTripsRef.current = new Map(data.trips.map(t => [t.id, t]));
+        sharedVersionsRef.current = data.versions;
         personalIndexRef.current = indexJSON(data.trips);
         skipNextSave.current = true;
         setSharedMeta(data.shared);
@@ -664,20 +671,34 @@ export default function App() {
           await saveUserItineraries(atStart);
           personalIndexRef.current = indexSnapshot;
         }
-        for (const trip of atStart) {
-          if (!trip.sharedId || collabConflict?.sharedId === trip.sharedId) continue;
+        const dirtyShared = atStart.flatMap(trip => {
+          if (!trip.sharedId || collabConflict?.sharedId === trip.sharedId) return [];
           const baseTrip = syncedTripsRef.current.get(trip.id);
-          if (!baseTrip || jsonEqual(baseTrip, trip)) continue;
-          failingSharedId = trip.sharedId;
-          const result = await saveSharedTrip({ sharedId: trip.sharedId, baseTrip, trip });
-          syncedTripsRef.current.set(trip.id, result.trip);
-          setSharedMeta(prev => ({ ...prev, [trip.sharedId]: result.shared }));
-          setTrips(current => current.map(t => {
-            if (t.id !== trip.id) return t;
-            if (jsonEqual(t, trip)) return result.trip;
-            // A newer local change occurred during the network request. Rebase it.
-            return mergeTrip(trip, t, result.trip, { preferLocal: true });
+          return baseTrip && !jsonEqual(baseTrip, trip) ? [{ trip, baseTrip }] : [];
+        });
+        // Independent trips can be saved together. Limit concurrency to avoid
+        // overwhelming Blob and retain the successful results if another fails.
+        for (let start = 0; start < dirtyShared.length; start += 4) {
+          const batch = dirtyShared.slice(start, start + 4);
+          const outcomes = await Promise.allSettled(batch.map(async ({ trip, baseTrip }) => {
+            const result = await saveSharedTrip({ sharedId: trip.sharedId, baseTrip, trip });
+            syncedTripsRef.current.set(trip.id, result.trip);
+            sharedVersionsRef.current = {
+              ...sharedVersionsRef.current, [trip.sharedId]: result.revision
+            };
+            setSharedMeta(prev => ({ ...prev, [trip.sharedId]: result.shared }));
+            setTrips(current => current.map(t => {
+              if (t.id !== trip.id) return t;
+              if (jsonEqual(t, trip)) return result.trip;
+              // A newer local change occurred during the network request. Rebase it.
+              return mergeTrip(trip, t, result.trip, { preferLocal: true });
+            }));
           }));
+          const failedAt = outcomes.findIndex(item => item.status === 'rejected');
+          if (failedAt !== -1) {
+            failingSharedId = batch[failedAt].trip.sharedId;
+            throw outcomes[failedAt].reason;
+          }
         }
         setDbError('');
         succeeded = true;
@@ -693,51 +714,84 @@ export default function App() {
         // On failure, don't spin endlessly retrying against a disconnected server.
         if (succeeded) setSyncPulse(v => v + 1);
       }
-    }, 650);
+    }, 450);
     return () => clearTimeout(timer);
   }, [trips, currentUser, tripsLoaded, syncPulse, collabConflict]);
 
-  // Check for other editors every 6 seconds. Preserve any local unsaved changes.
+  // Every 6 seconds, check shared ETags. Only changed trips cross the network.
+  // Unchanged polls do not trigger any React updates or JSON comparisons.
   useEffect(() => {
     if (!currentUser || !tripsLoaded) return;
-    const timer = setInterval(async () => {
-      if (saveRunningRef.current || pollRunningRef.current) return;
+    let active = true;
+    const poll = async () => {
+      if (!active || document.hidden || saveRunningRef.current || pollRunningRef.current) return;
       pollRunningRef.current = true;
+      const versionsAtStart = sharedVersionsRef.current;
       try {
-        const result = await loadUserItineraries();
-        const remoteById = new Map(result.trips.filter(t => t.sharedId).map(t => [t.id, t]));
-        const known = new Set();
+        const result = await pollUserItineraries(versionsAtStart);
+        // A save/share action may have completed after this poll began. Never
+        // apply an older poll response over its newer authoritative ETag.
+        if (!active || saveRunningRef.current || sharedVersionsRef.current !== versionsAtStart) return;
+        const accessible = new Map(result.pointers.map(p => [p.id, p.sharedId]));
+        const remoteById = new Map(result.trips.map(t => [t.id, t]));
+        const previousVersions = sharedVersionsRef.current;
+        sharedVersionsRef.current = Object.fromEntries(result.pointers.map(p =>
+          [p.sharedId, result.versions[p.sharedId] || previousVersions[p.sharedId]]));
         setTrips(prev => {
+          let changed = false;
           const next = prev.flatMap(t => {
             if (!t.sharedId) return [t];
+            if (accessible.get(t.id) !== t.sharedId) {
+              changed = true;
+              syncedTripsRef.current.delete(t.id);
+              return []; // membership removed or sharing stopped
+            }
             const incoming = remoteById.get(t.id);
-            if (!incoming) return []; // membership was revoked or sharing stopped
-            known.add(t.id);
+            if (!incoming) return [t]; // ETag unchanged; keep existing reference
             const base = syncedTripsRef.current.get(t.id);
             if (!base || jsonEqual(t, base)) {
               syncedTripsRef.current.set(t.id, incoming);
+              if (!jsonEqual(t, incoming)) changed = true;
               return [incoming];
             }
-            return [t]; // locally dirty: server will merge during save
+            return [t]; // local edits are rebased by the save endpoint
           });
-          for (const remote of remoteById.values()) {
-            if (!known.has(remote.id)) {
-              next.push(remote);
-              syncedTripsRef.current.set(remote.id, remote);
+          for (const [id] of accessible) {
+            if (next.some(t => t.id === id)) continue;
+            const incoming = remoteById.get(id);
+            if (incoming) {
+              next.push(incoming);
+              syncedTripsRef.current.set(id, incoming);
+              changed = true;
             }
           }
-          // Do not pollute the private account index with a refresh-only update.
+          if (!changed) return prev;
+          // A remote invite or revocation changes the pointer set, not a local edit.
           if (indexJSON(next) !== indexJSON(prev)) personalIndexRef.current = indexJSON(next);
-          return jsonEqual(prev, next) ? prev : next;
+          return next;
         });
-        setSharedMeta(result.shared);
+        setSharedMeta(prev => {
+          const currentIds = new Set(result.pointers.map(p => p.sharedId));
+          if (!Object.keys(result.shared).length &&
+              Object.keys(prev).every(id => currentIds.has(id))) return prev;
+          return { ...Object.fromEntries(Object.entries(prev).filter(([id]) => currentIds.has(id))),
+            ...result.shared };
+        });
       } catch (err) {
         // Keep the current unsaved trip and try on the next poll.
       } finally {
         pollRunningRef.current = false;
       }
-    }, 6000);
-    return () => clearInterval(timer);
+    };
+    const timer = setInterval(poll, 6000);
+    // Catch up promptly after the tab has been asleep instead of polling in the background.
+    const onVisible = () => { if (!document.hidden) poll(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      active = false;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [currentUser, tripsLoaded]);
 
   const [activeTripId, setActiveTripId] = useState(null);
@@ -896,6 +950,7 @@ export default function App() {
     setTrips([]);
     setTripsLoaded(false);
     syncedTripsRef.current.clear();
+    sharedVersionsRef.current = {};
     personalIndexRef.current = '';
     setSharedMeta({});
     setDbError('');
@@ -1160,6 +1215,7 @@ export default function App() {
       personalIndexRef.current = indexJSON(current);
       const result = await collaborationApi({ action: 'create', tripId: activeTrip.id, trip: activeTrip });
       syncedTripsRef.current.set(activeTrip.id, result.trip);
+      sharedVersionsRef.current = { ...sharedVersionsRef.current, [result.trip.sharedId]: result.revision };
       setTrips(prev => prev.map(t => t.id === result.trip.id ? result.trip : t));
       setSharedMeta(prev => ({ ...prev, [result.trip.sharedId]: result.shared }));
       setShareDetails(result.shared);
@@ -1193,12 +1249,16 @@ export default function App() {
       const result = await collaborationApi({ action, sharedId: id, ...extra });
       if (action === 'stop') {
         syncedTripsRef.current.set(result.trip.id, result.trip);
+        sharedVersionsRef.current = Object.fromEntries(
+          Object.entries(sharedVersionsRef.current).filter(([key]) => key !== id));
         setTrips(prev => prev.map(t => t.id === result.trip.id ? result.trip : t));
         setSharedMeta(prev => { const copy = { ...prev }; delete copy[id]; return copy; });
         setShareDetails(null);
         setShowShareModal(false);
       } else if (action === 'leave') {
         syncedTripsRef.current.delete(activeTrip.id);
+        sharedVersionsRef.current = Object.fromEntries(
+          Object.entries(sharedVersionsRef.current).filter(([key]) => key !== id));
         setTrips(prev => prev.filter(t => t.id !== activeTrip.id));
         setActiveTripId(null);
         setActiveDay(null);
@@ -1226,6 +1286,7 @@ export default function App() {
         });
       } else result = await loadSharedTrip(trip.sharedId);
       syncedTripsRef.current.set(trip.id, result.trip);
+      sharedVersionsRef.current = { ...sharedVersionsRef.current, [trip.sharedId]: result.revision };
       setTrips(prev => prev.map(t => t.id === trip.id ? result.trip : t));
       setSharedMeta(prev => ({ ...prev, [trip.sharedId]: result.shared }));
       setCollabConflict(null);

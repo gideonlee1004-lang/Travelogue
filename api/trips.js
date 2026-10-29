@@ -1,6 +1,7 @@
 // Personal trip index and private trips. Shared trip bodies live in /shared/<id>.json.
 import { StoreError, ConflictError, readJson, updateJson, tripsPathFor, readSession, send } from './_lib.js';
 import { getShared, canRead, summary, pointer } from './_shared.js';
+import { collectTripUpdates } from './_tripUpdates.js';
 
 export default async function handler(req, res) {
   const session = readSession(req);
@@ -23,23 +24,39 @@ export default async function handler(req, res) {
       return send(res, 200, { trips, versions, shared });
     }
 
+    // Small polling response: unchanged shared trip bodies never cross the wire.
+    // POST avoids large URLs when a user has many shared itineraries.
+    if (req.method === 'POST') {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
+      if (body.action !== 'poll' || !body.knownVersions ||
+          typeof body.knownVersions !== 'object' || Array.isArray(body.knownVersions) ||
+          Object.keys(body.knownVersions).length > 150) {
+        return send(res, 400, { error: 'Invalid poll request' });
+      }
+      const personal = await readJson(path);
+      const result = await collectTripUpdates(personal, session.id, body.knownVersions,
+        getShared, canRead, summary);
+      return send(res, 200, result);
+    }
+
     if (req.method === 'PUT') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
       if (!Array.isArray(body.trips) || body.trips.length > 150) {
         return send(res, 400, { error: 'Invalid trip list' });
       }
-      const personal = [];
-      for (const trip of body.trips) {
-        if (!trip || typeof trip.id !== 'string') return send(res, 400, { error: 'Invalid trip' });
-        if (!trip.sharedId) {
-          personal.push({ ...trip, userId: session.id });
-        } else {
-          const { value: doc } = await getShared(trip.sharedId);
-          if (!doc || !canRead(doc, session.id) || doc.trip.id !== trip.id) {
-            return send(res, 403, { error: 'You no longer have access to this shared trip. Refresh.' });
-          }
-          personal.push(pointer(trip, trip.sharedId));
-        }
+      if (body.trips.some(trip => !trip || typeof trip.id !== 'string')) {
+        return send(res, 400, { error: 'Invalid trip' });
+      }
+      // Validate all shared memberships in parallel instead of waiting for a
+      // separate Blob round trip per shared trip. No writes occur until ALL pass.
+      const personal = await Promise.all(body.trips.map(async trip => {
+        if (!trip.sharedId) return { ...trip, userId: session.id };
+        const { value: doc } = await getShared(trip.sharedId);
+        if (!doc || !canRead(doc, session.id) || doc.trip.id !== trip.id) return null;
+        return pointer(trip, trip.sharedId);
+      }));
+      if (personal.includes(null)) {
+        return send(res, 403, { error: 'You no longer have access to this shared trip. Refresh.' });
       }
       // Preserve share links newly added by invite acceptances or shares since this tab last loaded.
       await updateJson(path, old => {
