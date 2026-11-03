@@ -1,7 +1,7 @@
 // Shared server-side helpers for Travelogue (Vercel Serverless Functions).
 // Files starting with "_" inside /api are NOT exposed as routes.
 import crypto from 'node:crypto';
-import { put, get, BlobPreconditionFailedError } from '@vercel/blob';
+import { put, get, head, BlobPreconditionFailedError } from '@vercel/blob';
 import { readConsistentBlobSnapshot, SnapshotReadError } from './_blobSnapshot.js';
 
 // Your Vercel integration prefix is "TRAVELOGUE_DB", so the token variable is
@@ -27,7 +27,7 @@ function ensureConfigured() {
 export async function readJsonWithMeta(pathname, { requireEtag = false } = {}) {
   ensureConfigured();
   try {
-    return await readConsistentBlobSnapshot(pathname, { token: TOKEN, getFn: get, requireEtag });
+    return await readConsistentBlobSnapshot(pathname, { token: TOKEN, getFn: get, headFn: head, requireEtag });
   } catch (err) {
     if (err instanceof SnapshotReadError) throw new StoreError(err.message);
     throw err;
@@ -66,7 +66,7 @@ export async function writeJson(pathname, data, { overwrite = true, ifMatch } = 
 }
 
 // Atomic read-modify-write with optimistic concurrency control.
-// The uncached get() obtains the latest JSON and its ETag in ONE request.
+// Prefer a same-response ETag, with a verified HEAD/GET/HEAD fallback if missing.
 // Conditional put() ensures another editor cannot be silently overwritten.
 export async function updateJson(pathname, mutate, retries = 6) {
   ensureConfigured();
