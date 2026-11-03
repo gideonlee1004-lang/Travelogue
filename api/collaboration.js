@@ -68,7 +68,7 @@ export default async function handler(req, res) {
         return send(res, 400, { error: 'Trip and baseTrip must refer to the same trip.' });
       }
       for (let i = 0; i < 6; i++) {
-        const { value: doc, etag } = await getShared(body.sharedId);
+        const { value: doc, etag } = await getShared(body.sharedId, { requireEtag: true });
         if (!doc || !canRead(doc, session.id)) return send(res, 403, { error: 'Access to this trip was removed.' });
         if (doc.trip.id !== body.trip.id) return send(res, 400, { error: 'Trip identifier mismatch.' });
         let nextTrip;
@@ -197,7 +197,7 @@ export default async function handler(req, res) {
     }
 
     if (action === 'stop') {
-      const { value: doc, etag } = await getShared(sharedId);
+      const { value: doc, etag } = await getShared(sharedId, { requireEtag: true });
       if (!doc || memberRole(doc, session.id) !== 'owner') return send(res, 403, { error: 'Only the owner can stop sharing.' });
       // Delete with ETag so no concurrent edit is inadvertently removed.
       try {

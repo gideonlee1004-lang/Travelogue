@@ -90,11 +90,32 @@ test('permission error fails without retrying or assuming missing record', async
   assert.equal(calls, 1);
 });
 
-test('never accepts missing or weak ETags for conditional writes', async () => {
-  await assert.rejects(read(async () => ({ ...result(), blob: {} })), SnapshotReadError);
-  await assert.rejects(read(async () => result(trip, 'W/"revision-2"')), SnapshotReadError);
-  await assert.rejects(read(async () => result(trip, '"bad"token"')), SnapshotReadError);
+test('read-only requests work when Blob omits the ETag metadata', async () => {
+  const record = await read(async () => ({ ...result(), blob: {} }));
+  assert.deepEqual(record.value, trip);
+  assert.equal(record.etag, null);
 });
+
+test('same-response ETag header is used when blob metadata omits it', async () => {
+  const record = await read(async () => ({
+    ...result(), blob: {}, headers: new Headers({ ETag: '"from-header"' })
+  }), { requireEtag: true });
+  assert.equal(record.etag, '"from-header"');
+});
+
+test('never accepts missing or weak ETags when a conditional write is planned', async () => {
+  const strict = getFn => read(getFn, { requireEtag: true });
+  await assert.rejects(strict(async () => ({ ...result(), blob: {} })), SnapshotReadError);
+  await assert.rejects(strict(async () => result(trip, 'W/"revision-2"')), SnapshotReadError);
+  await assert.rejects(strict(async () => result(trip, '"bad"token"')), SnapshotReadError);
+});
+
+test('read-only request ignores an unusable weak ETag', async () => {
+  const record = await read(async () => result(trip, 'W/"revision-2"'));
+  assert.deepEqual(record.value, trip);
+  assert.equal(record.etag, null);
+});
+
 
 test('invalid JSON prevents saving instead of overwriting existing data', async () => {
   const broken = {

@@ -1,7 +1,7 @@
-// Read a private Vercel Blob's JSON and ETag in ONE consistent origin request.
-// Vercel Blob SDK >= 2.6 supports useCache: false; unlike cached reads, this
-// reflects the latest write and returns the matching ETag in result.blob.etag.
-// Never use a separate head() ETag with content from another request.
+// Read a private Vercel Blob's JSON and ETag in one consistent origin request.
+// "useCache: false" bypasses the Blob CDN's potentially stale data after an
+// overwrite. Never combine the JSON from one GET with an ETag from a HEAD or
+// another GET: that could allow a stale edit to overwrite a newer document.
 export class SnapshotReadError extends Error {}
 
 function strongEtag(value) {
@@ -13,21 +13,35 @@ function strongEtag(value) {
   return !!inner && !inner.includes('"');
 }
 
+// The SDK normally supplies blob.etag. Its raw response headers provide a
+// same-response fallback for SDK/edge variants that omit the metadata field.
+// Do NOT fall back to head(): that metadata might belong to different content.
+function responseEtag(result) {
+  const metadataTag = result?.blob?.etag;
+  if (strongEtag(metadataTag)) return metadataTag.trim();
+  const headers = result?.headers;
+  const headerTag = typeof headers?.get === 'function'
+    ? headers.get('etag')
+    : headers?.etag ?? headers?.ETag ?? headers?.ETAG;
+  return strongEtag(headerTag) ? headerTag.trim() : null;
+}
+
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function errorStatus(error) {
   const code = Number(error?.statusCode ?? error?.status);
   if (Number.isInteger(code) && code > 0) return code;
-  // The Blob SDK sometimes throws named errors without an HTTP status field.
   if (error?.name === 'BlobServiceNotAvailable') return 503;
   if (error?.name === 'BlobServiceRateLimited') return 429;
   return null;
 }
 
-// Allow dependency injection for tests; production uses @vercel/blob's get().
+// Read-only requests may safely load data without an ETag. Mutations MUST
+// request requireEtag: true, so an existing record is never written without
+// a verified ETag from the same response as the document body.
 export async function readConsistentBlobSnapshot(pathname, {
-  token, getFn, waitFn = delay, attempts = 3
+  token, getFn, waitFn = delay, attempts = 3, requireEtag = false
 }) {
   if (!token) throw new SnapshotReadError('Blob token is not configured.');
   if (typeof getFn !== 'function') throw new SnapshotReadError('Blob read function is not configured.');
@@ -46,14 +60,12 @@ export async function readConsistentBlobSnapshot(pathname, {
         continue;
       }
       throw new SnapshotReadError(
-        status ? `Unable to read Vercel Blob (HTTP ${status}). Please retry saving.` :
-          'Unable to read Vercel Blob. Check the Blob connection and retry saving.'
+        status ? `Unable to read Vercel Blob (HTTP ${status}). Please retry.` :
+          'Unable to read Vercel Blob. Check the Blob connection and retry.'
       );
     }
 
-    if (result == null || result.statusCode === 404) {
-      return { value: null, etag: null };
-    }
+    if (result == null || result.statusCode === 404) return { value: null, etag: null };
     if (RETRYABLE_STATUSES.has(result.statusCode) && attempt + 1 < attempts) {
       await waitFn(250 * (attempt + 1));
       continue;
@@ -62,16 +74,18 @@ export async function readConsistentBlobSnapshot(pathname, {
       throw new SnapshotReadError(`Unable to read Vercel Blob (HTTP ${result.statusCode}).`);
     }
 
-    // An ETag must come from the same read as the JSON, and must be strong for
-    // conditional writes. Refuse to overwrite data when the ETag is missing.
-    const etag = result.blob?.etag;
-    if (!strongEtag(etag)) {
-      throw new SnapshotReadError('Blob response has no valid strong ETag; save was prevented.');
+    const etag = responseEtag(result);
+    if (requireEtag && !etag) {
+      throw new SnapshotReadError(
+        'Blob did not return a valid ETag for a safe update. No changes were written. '
+        + 'Check the Vercel Blob connection and SDK version.'
+      );
     }
     try {
-      return { value: JSON.parse(await new Response(result.stream).text()), etag };
+      const value = JSON.parse(await new Response(result.stream).text());
+      return { value, etag };
     } catch {
-      throw new SnapshotReadError('The saved Blob content is not valid JSON; save was prevented.');
+      throw new SnapshotReadError('The saved Blob content is not valid JSON; no changes were written.');
     }
   }
   throw new SnapshotReadError('Unable to read Vercel Blob after retries.');

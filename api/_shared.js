@@ -17,10 +17,10 @@ export function summary(doc, userId, includeInvite = false) {
   };
 }
 
-export async function getShared(id) {
+export async function getShared(id, options = {}) {
   const path = sharedPathFor(id);
   if (!path) return { value: null, etag: null };
-  return readJsonWithMeta(path);
+  return readJsonWithMeta(path, options);
 }
 
 export function pointer(trip, shareId) {

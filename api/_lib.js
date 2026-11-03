@@ -24,10 +24,10 @@ function ensureConfigured() {
 
 // ---------- Blob read / write (private store) ----------
 
-export async function readJsonWithMeta(pathname) {
+export async function readJsonWithMeta(pathname, { requireEtag = false } = {}) {
   ensureConfigured();
   try {
-    return await readConsistentBlobSnapshot(pathname, { token: TOKEN, getFn: get });
+    return await readConsistentBlobSnapshot(pathname, { token: TOKEN, getFn: get, requireEtag });
   } catch (err) {
     if (err instanceof SnapshotReadError) throw new StoreError(err.message);
     throw err;
@@ -73,9 +73,12 @@ export async function updateJson(pathname, mutate, retries = 6) {
   const recordType = pathname.split('/')[0];
   const reasons = {};
   for (let i = 0; i < retries; i++) {
-    const { value, etag } = await readJsonWithMeta(pathname);
+    const { value, etag } = await readJsonWithMeta(pathname, { requireEtag: true });
     const next = await mutate(value);
-    if (next === undefined) return { value, etag };
+    if (next === undefined || JSON.stringify(next) === JSON.stringify(value)) {
+      // Avoid unnecessary version bumps that provoke ETag conflicts in other tabs.
+      return { value, etag };
+    }
     try {
       const written = await writeJson(pathname, next, {
         overwrite: !!etag, ifMatch: etag
@@ -83,6 +86,9 @@ export async function updateJson(pathname, mutate, retries = 6) {
       return { value: next, etag: written.etag };
     } catch (err) {
       if (!(err instanceof ConflictError)) throw err;
+      // Another writer won the race. Re-read origin and re-run the mutation;
+      // never retry the same stale ETag or retry an unconditional overwrite.
+      if (i + 1 < retries) await new Promise(resolve => setTimeout(resolve, 40 * (i + 1)));
       const reason = err.blobReason || 'conflict';
       reasons[reason] = (reasons[reason] || 0) + 1;
       console.warn('[Travelogue] Blob conditional write rejected', {
