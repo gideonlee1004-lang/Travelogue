@@ -850,20 +850,14 @@ export default function App() {
   });
 
   const [showAddFlightModal, setShowAddFlightModal] = useState(false);
-  const [newFlight, setNewFlight] = useState({
-    flightNumber: '',
-    airline: '',
-    departureAirport: '',
-    arrivalAirport: '',
-    departureTime: '08:00',
-    arrivalTime: '12:00',
-    departureLat: null,
-    departureLng: null,
-    arrivalLat: null,
-    arrivalLng: null,
-    bookingRef: '',
-    note: ''
-  });
+  const [newFlight, setNewFlight] = useState({ flightNumber: '', date: '', seatNumber: '', bookingRef: '' });
+  const [flightMatches, setFlightMatches] = useState([]);
+  const [selectedFlightIndex, setSelectedFlightIndex] = useState(0);
+  const [flightLookupBusy, setFlightLookupBusy] = useState(false);
+  const [flightLookupError, setFlightLookupError] = useState('');
+  const [refreshingFlightIds, setRefreshingFlightIds] = useState([]);
+  const [flightRefreshErrors, setFlightRefreshErrors] = useState({});
+  const flightRefreshInProgressRef = useRef(new Set());
 
   // Stay / Hotel Modal state
   const [showStayModal, setShowStayModal] = useState(false);
@@ -1295,26 +1289,6 @@ export default function App() {
     finally { setIsDbSyncing(false); }
   };
 
-  const handleDeparturePlaceSelected = useCallback((place) => {
-    if (!place) return;
-    setNewFlight(prev => ({
-      ...prev,
-      departureAirport: place.name || place.address,
-      departureLat: place.lat,
-      departureLng: place.lng
-    }));
-  }, []);
-
-  const handleArrivalPlaceSelected = useCallback((place) => {
-    if (!place) return;
-    setNewFlight(prev => ({
-      ...prev,
-      arrivalAirport: place.name || place.address,
-      arrivalLat: place.lat,
-      arrivalLng: place.lng
-    }));
-  }, []);
-
   const handleCreateTrip = (e) => {
     e.preventDefault();
     if (!newTripForm.name.trim()) return;
@@ -1563,70 +1537,163 @@ export default function App() {
     setShowEditStopModal(false);
   };
 
-  const handleAddFlight = (e) => {
-    e.preventDefault();
+  const handleOpenAddFlight = () => {
     if (!activeTrip) return;
+    setNewFlight({ flightNumber: '', date: getDayDateString(activeTrip.startDate, activeDay || 1), seatNumber: '', bookingRef: '' });
+    setFlightMatches([]);
+    setSelectedFlightIndex(0);
+    setFlightLookupError('');
+    setShowAddFlightModal(true);
+  };
 
-    const targetDay = activeDay || 1;
-    const flightName = newFlight.flightNumber 
-      ? `Flight ${newFlight.flightNumber} (${newFlight.departureAirport || 'Dep'} → ${newFlight.arrivalAirport || 'Arr'})`
-      : `Flight (${newFlight.departureAirport || 'Dep'} → ${newFlight.arrivalAirport || 'Arr'})`;
+  const handleSearchFlight = async (e) => {
+    e.preventDefault();
+    if (!newFlight.flightNumber.trim() || !newFlight.date) return;
+    setFlightLookupBusy(true);
+    setFlightLookupError('');
+    setFlightMatches([]);
+    try {
+      const response = await apiRequest('/api/flights', {
+        method: 'POST', body: JSON.stringify({
+          action: 'lookup', flightNumber: newFlight.flightNumber.trim(), date: newFlight.date
+        })
+      });
+      if (!response.flights?.length) {
+        setFlightLookupError('No published schedule found for that flight number and departure date. Check the number/date or try again nearer departure.');
+        return;
+      }
+      setFlightMatches(response.flights);
+      setSelectedFlightIndex(0);
+    } catch (err) {
+      setFlightLookupError(err.message);
+    } finally {
+      setFlightLookupBusy(false);
+    }
+  };
+
+  const handleAddFlight = () => {
+    const selected = flightMatches[selectedFlightIndex];
+    if (!activeTrip || !selected) return;
+    // The selected date, not the currently opened day tab, determines the itinerary day.
+    const targetDay = calculateDaysCount(activeTrip.startDate, selected.flightDate);
+    if (selected.flightDate < activeTrip.startDate || targetDay < 1 || targetDay > activeTrip.daysCount) {
+      setFlightLookupError(`Flight departs on ${selected.flightDate}, outside this trip (${activeTrip.startDate} to ${getEndDateString(activeTrip.startDate, activeTrip.daysCount)}). Edit trip dates first.`);
+      return;
+    }
+    if (!selected.departureTime) {
+      setFlightLookupError('AeroAPI did not return a local departure time. Please try the lookup again.');
+      return;
+    }
 
     const createdFlightStop = {
-      id: `f_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      ...selected,
+      id: `f_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       isFlight: true,
       category: 'Flights',
-      name: flightName,
-      flightNumber: newFlight.flightNumber,
-      airline: newFlight.airline,
-      departureAirport: newFlight.departureAirport,
-      arrivalAirport: newFlight.arrivalAirport,
-      departureLat: newFlight.departureLat !== null ? parseFloat(newFlight.departureLat) : null,
-      departureLng: newFlight.departureLng !== null ? parseFloat(newFlight.departureLng) : null,
-      arrivalLat: newFlight.arrivalLat !== null ? parseFloat(newFlight.arrivalLat) : null,
-      arrivalLng: newFlight.arrivalLng !== null ? parseFloat(newFlight.arrivalLng) : null,
-      time: newFlight.departureTime || '08:00',
-      arrivalTime: newFlight.arrivalTime || '',
-      address: `${newFlight.airline ? `${newFlight.airline} • ` : ''}${newFlight.departureAirport || 'Departure'} → ${newFlight.arrivalAirport || 'Arrival'}`,
-      note: [
-        newFlight.bookingRef ? `Booking Ref: ${newFlight.bookingRef}` : '',
-        newFlight.note
-      ].filter(Boolean).join(' • '),
-      lat: newFlight.departureLat !== null ? parseFloat(newFlight.departureLat) : (newFlight.arrivalLat !== null ? parseFloat(newFlight.arrivalLat) : activeTrip.center[0]),
-      lng: newFlight.departureLng !== null ? parseFloat(newFlight.departureLng) : (newFlight.arrivalLng !== null ? parseFloat(newFlight.arrivalLng) : activeTrip.center[1]),
+      name: `Flight ${selected.flightNumber} (${selected.originCode || 'Departure'} → ${selected.destinationCode || 'Arrival'})`,
+      time: selected.departureTime,
+      seatNumber: newFlight.seatNumber.trim(),
+      bookingRef: newFlight.bookingRef.trim(),
+      note: '',
+      address: `${selected.originCode || selected.departureAirport} → ${selected.destinationCode || selected.arrivalAirport}`,
+      lat: selected.departureLat ?? selected.arrivalLat ?? activeTrip.center[0],
+      lng: selected.departureLng ?? selected.arrivalLng ?? activeTrip.center[1],
       types: ['flight', 'airport']
     };
-
-    setTrips(prev =>
-      prev.map(trip => {
-        if (trip.id !== activeTrip.id) return trip;
-        const currentSchedule = trip.schedule[targetDay] || [];
-        return {
-          ...trip,
-          schedule: {
-            ...trip.schedule,
-            [targetDay]: sortStopsByTime([...currentSchedule, createdFlightStop])
-          }
-        };
-      })
-    );
-
-    setNewFlight({
-      flightNumber: '',
-      airline: '',
-      departureAirport: '',
-      arrivalAirport: '',
-      departureTime: '08:00',
-      arrivalTime: '12:00',
-      departureLat: null,
-      departureLng: null,
-      arrivalLat: null,
-      arrivalLng: null,
-      bookingRef: '',
-      note: ''
-    });
+    setTrips(prev => prev.map(trip => {
+      if (trip.id !== activeTrip.id) return trip;
+      const current = trip.schedule[targetDay] || [];
+      return {
+        ...trip,
+        schedule: { ...trip.schedule, [targetDay]: sortStopsByTime([...current, createdFlightStop]) }
+      };
+    }));
+    setActiveDay(targetDay);
     setShowAddFlightModal(false);
+    setNewFlight({ flightNumber: '', date: '', seatNumber: '', bookingRef: '' });
+    setFlightMatches([]);
   };
+
+  const refreshSavedFlight = useCallback(async (tripId, day, flight, force = false) => {
+    if (!flight?.isFlight || !flight?.scheduledOut || !flight.flightDate ||
+        flightRefreshInProgressRef.current.has(flight.id)) return;
+    const now = Date.now();
+    const due = !flight.lastChecked || now - Date.parse(flight.lastChecked) >= 10 * 60 * 1000;
+    if (!force && !due) return;
+    flightRefreshInProgressRef.current.add(flight.id);
+    setRefreshingFlightIds(prev => [...prev, flight.id]);
+    setFlightRefreshErrors(prev => ({ ...prev, [flight.id]: '' }));
+    try {
+      const result = await apiRequest('/api/flights', {
+        method: 'POST', body: JSON.stringify({ action: 'refresh', flight: {
+          flightNumber: flight.flightNumber, flightDate: flight.flightDate,
+          operatingIdent: flight.operatingIdent, faFlightId: flight.faFlightId,
+          originCode: flight.originCode, originIcao: flight.originIcao,
+          scheduledOut: flight.scheduledOut
+        } })
+      });
+      if (!result.details || result.details.outsideWindow) return;
+      setTrips(prev => prev.map(trip => {
+        if (trip.id !== tripId) return trip;
+        const old = trip.schedule?.[day] || [];
+        if (!old.some(item => item.id === flight.id)) return trip;
+        const updated = old.map(item => {
+          if (item.id !== flight.id) return item;
+          // Null means unavailable, not a confirmed deletion of airport gate data.
+          const details = Object.fromEntries(Object.entries(result.details)
+            .filter(([key, val]) => val !== null && val !== undefined && key !== 'outsideWindow'));
+          const gateChanged = item.departureGate && details.departureGate && item.departureGate !== details.departureGate;
+          return {
+            ...item, ...details,
+            ...(gateChanged ? { gateChangedFrom: item.departureGate } : {})
+          };
+        });
+        return { ...trip, schedule: { ...trip.schedule, [day]: updated } };
+      }));
+    } catch (err) {
+      setFlightRefreshErrors(prev => ({ ...prev, [flight.id]: err.message }));
+    } finally {
+      flightRefreshInProgressRef.current.delete(flight.id);
+      setRefreshingFlightIds(prev => prev.filter(id => id !== flight.id));
+    }
+  }, []);
+
+  // While Travelogue is open: refresh flight-day gates every 10 minutes, plus on return to the tab.
+  useEffect(() => {
+    if (!currentUser || !tripsLoaded) return;
+    const checkFlights = () => {
+      if (document.hidden) return;
+      const trip = tripsRef.current.find(t => t.id === activeTripId);
+      if (!trip) return;
+      const now = new Date();
+      for (const [day, stops] of Object.entries(trip.schedule || {})) {
+        for (const flight of stops || []) {
+          if (!flight.isFlight || !flight.scheduledOut || !flight.flightDate) continue;
+          let originToday = '';
+          try {
+            const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+              year: 'numeric', month: '2-digit', day: '2-digit', timeZone: flight.departureTimezone || 'UTC'
+            }).formatToParts(now).map(part => [part.type, part.value]));
+            originToday = `${parts.year}-${parts.month}-${parts.day}`;
+          } catch { originToday = now.toISOString().slice(0, 10); }
+          const msUntilDeparture = Date.parse(flight.scheduledOut) - now.getTime();
+          if (originToday === flight.flightDate || (msUntilDeparture > -8 * 3600000 && msUntilDeparture < 24 * 3600000)) {
+            refreshSavedFlight(trip.id, day, flight);
+          }
+        }
+      }
+    };
+    checkFlights();
+    const timer = window.setInterval(checkFlights, 10 * 60 * 1000);
+    const onVisible = () => checkFlights();
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [activeTripId, currentUser, tripsLoaded, refreshSavedFlight]);
 
   const handleOpenInGoogleMaps = (stop) => {
     let mapsUrl = '';
@@ -2563,7 +2630,7 @@ export default function App() {
                         <span>{activeTrip.staysByDay?.[activeDay] ? 'Edit Stay' : 'Add Stay'}</span>
                       </button>
                       <button
-                        onClick={() => setShowAddFlightModal(true)}
+                        onClick={handleOpenAddFlight}
                         className="flex items-center space-x-1 text-xs px-2.5 py-1 border border-sky-200 bg-sky-50/50 text-sky-800 rounded hover:border-sky-400 transition-all cursor-pointer"
                       >
                         <Plane className="w-3.5 h-3.5 text-sky-600" />
@@ -2838,6 +2905,9 @@ export default function App() {
                                           {stop.address || stop.area}
                                         </p>
                                       )}
+                                      {stop.isFlight && stop.scheduledOut && (
+                                        <p className="text-[11px] text-sky-700 mt-0.5">Terminal {stop.departureTerminal || 'TBC'} · Gate {stop.departureGate || 'TBC'}</p>
+                                      )}
                                     </div>
                                   </div>
                                   <div className="flex items-center space-x-3 shrink-0">
@@ -2873,7 +2943,7 @@ export default function App() {
                   <p className="text-xs text-[#888888]">No stops scheduled for Day {activeDay}.</p>
                   <div className="flex items-center justify-center space-x-2">
                     <button
-                      onClick={() => setShowAddFlightModal(true)}
+                      onClick={handleOpenAddFlight}
                       className="flex items-center space-x-1 text-xs px-3 py-1.5 border border-sky-200 bg-sky-50/50 text-sky-800 rounded hover:border-sky-400 transition-all cursor-pointer"
                     >
                       <Plane className="w-3.5 h-3.5 text-sky-600" />
@@ -2995,6 +3065,32 @@ export default function App() {
                               </p>
                             )}
 
+                            {stop.isFlight && stop.scheduledOut && (
+                              <div className="mt-2 p-2 rounded border border-sky-200/70 bg-white text-[11px] text-sky-900 space-y-1">
+                                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                  <span>Depart terminal: <strong>{stop.departureTerminal || 'Not published'}</strong></span>
+                                  <span>Depart gate: <strong>{stop.departureGate || 'Not assigned'}</strong></span>
+                                  {stop.arrivalTerminal && <span>Arrival terminal: <strong>{stop.arrivalTerminal}</strong></span>}
+                                  {stop.arrivalGate && <span>Arrival gate: <strong>{stop.arrivalGate}</strong></span>}
+                                </div>
+                                {stop.gateChangedFrom && <div className="font-semibold text-amber-700">Gate changed from {stop.gateChangedFrom} to {stop.departureGate}. Recheck airport monitors.</div>}
+                                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                  {stop.seatNumber && <span>Seat: {stop.seatNumber}</span>}
+                                  {stop.bookingRef && <span>Booking ref: {stop.bookingRef}</span>}
+                                  {stop.flightStatus && <span>Status: {stop.flightStatus}</span>}
+                                  {stop.cancelled && <span className="font-semibold text-red-700">Cancelled</span>}
+                                  {stop.estimatedDepartureTime && <span>Est. departure: {new Date(stop.estimatedDepartureTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: stop.departureTimezone || 'UTC' })} (departure local)</span>}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2 text-[#777777]">
+                                  <span>{stop.lastChecked ? `AeroAPI checked ${new Date(stop.lastChecked).toLocaleString()}` : 'Live status not yet checked'}</span>
+                                  <button type="button" onClick={() => refreshSavedFlight(activeTrip.id, activeDay, stop, true)} disabled={refreshingFlightIds.includes(stop.id)}
+                                    className="inline-flex gap-1 items-center text-sky-700 font-medium disabled:opacity-50 cursor-pointer">
+                                    <RefreshCw className={`w-3 h-3 ${refreshingFlightIds.includes(stop.id) ? 'animate-spin' : ''}`} /> Refresh
+                                  </button>
+                                </div>
+                                {flightRefreshErrors[stop.id] && <p className="text-red-700">{flightRefreshErrors[stop.id]}</p>}
+                              </div>
+                            )}
                             {stop.note && <p className="text-xs text-[#666666] mt-0.5">{stop.note}</p>}
                           </div>
                         </div>
@@ -3561,147 +3657,81 @@ export default function App() {
         </div>
       )}
 
-      {/* Add Flight Modal */}
+      {/* Add Flight Modal — flight number and departure date only; airports/times come from AeroAPI. */}
       {showAddFlightModal && activeTrip && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <form
-            onSubmit={handleAddFlight}
-            className="bg-[#fbfbf9] border border-[#e5e5e0] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
-          >
+          <div className="bg-[#fbfbf9] border border-[#e5e5e0] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#e5e5e0] pb-3">
-              <h3 className="font-serif text-base sm:text-lg font-normal flex items-center space-x-2">
-                <Plane className="w-5 h-5 text-sky-600" />
-                <span>Add Flight Segment (Day {activeDay || 1})</span>
+              <h3 className="font-serif text-base sm:text-lg font-normal flex items-center gap-2">
+                <Plane className="w-5 h-5 text-sky-600" /> Add Flight
               </h3>
-              <button
-                type="button"
-                onClick={() => setShowAddFlightModal(false)}
-                className="text-xs text-[#888888] hover:text-[#111111] cursor-pointer"
-              >
-                Close
-              </button>
+              <button type="button" onClick={() => setShowAddFlightModal(false)}
+                className="text-xs text-[#888888] hover:text-[#111111] cursor-pointer">Close</button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            <form onSubmit={handleSearchFlight} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={LABEL}>Flight No.</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. SQ638"
-                    value={newFlight.flightNumber}
-                    onChange={(e) => setNewFlight(prev => ({ ...prev, flightNumber: e.target.value }))}
-                    className={FIELD}
-                  />
+                  <label className={LABEL}>Flight number *</label>
+                  <input required type="text" placeholder="e.g. SQ638" value={newFlight.flightNumber}
+                    onChange={e => { setNewFlight(prev => ({ ...prev, flightNumber: e.target.value.toUpperCase() })); setFlightMatches([]); setFlightLookupError(''); }}
+                    className={FIELD} />
                 </div>
                 <div>
-                  <label className={LABEL}>Airline</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Singapore Airlines"
-                    value={newFlight.airline}
-                    onChange={(e) => setNewFlight(prev => ({ ...prev, airline: e.target.value }))}
-                    className={FIELD}
-                  />
+                  <label className={LABEL}>Departure date *</label>
+                  <input required type="date" value={newFlight.date}
+                    onChange={e => { setNewFlight(prev => ({ ...prev, date: e.target.value })); setFlightMatches([]); setFlightLookupError(''); }}
+                    className={FIELD} />
                 </div>
               </div>
-
-              <div>
-                <label className={LABEL}>Departure Airport</label>
-                {isLoaded ? (
-                  <PlaceAutocomplete
-                    placeholder="Search departure airport (e.g. Changi Airport)..."
-                    onPlaceSelected={handleDeparturePlaceSelected}
-                  />
-                ) : null}
-                <input
-                  type="text"
-                  placeholder="Airport name / code (e.g. SIN)"
-                  value={newFlight.departureAirport}
-                  onChange={(e) => setNewFlight(prev => ({ ...prev, departureAirport: e.target.value }))}
-                  className={`${FIELD} mt-1`}
-                />
-              </div>
-
-              <div>
-                <label className={LABEL}>Arrival Airport</label>
-                {isLoaded ? (
-                  <PlaceAutocomplete
-                    placeholder="Search arrival airport (e.g. Haneda Airport)..."
-                    onPlaceSelected={handleArrivalPlaceSelected}
-                  />
-                ) : null}
-                <input
-                  type="text"
-                  placeholder="Airport name / code (e.g. HND)"
-                  value={newFlight.arrivalAirport}
-                  onChange={(e) => setNewFlight(prev => ({ ...prev, arrivalAirport: e.target.value }))}
-                  className={`${FIELD} mt-1`}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={LABEL}>Departure Time</label>
-                  <input
-                    type="time"
-                    required
-                    value={newFlight.departureTime}
-                    onChange={(e) => setNewFlight(prev => ({ ...prev, departureTime: e.target.value }))}
-                    className={FIELD}
-                  />
-                </div>
-
-                <div>
-                  <label className={LABEL}>Arrival Time</label>
-                  <input
-                    type="time"
-                    value={newFlight.arrivalTime}
-                    onChange={(e) => setNewFlight(prev => ({ ...prev, arrivalTime: e.target.value }))}
-                    className={FIELD}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className={LABEL}>Booking Ref / Seat</label>
-                <input
-                  type="text"
-                  placeholder="e.g. PNR: ABC123D • Seat 14A"
-                  value={newFlight.bookingRef}
-                  onChange={(e) => setNewFlight(prev => ({ ...prev, bookingRef: e.target.value }))}
-                  className={FIELD}
-                />
-              </div>
-
-              <div>
-                <label className={LABEL}>Notes</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Terminal 3, check-in 3 hours before"
-                  value={newFlight.note}
-                  onChange={(e) => setNewFlight(prev => ({ ...prev, note: e.target.value }))}
-                  className={FIELD}
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e5e5e0]">
-              <button
-                type="button"
-                onClick={() => setShowAddFlightModal(false)}
-                className="px-3 py-1.5 border border-[#e5e5e0] text-[#666666] rounded hover:border-[#111111] text-xs cursor-pointer"
-              >
-                Cancel
+              <button type="submit" disabled={flightLookupBusy}
+                className="w-full flex justify-center items-center gap-2 rounded bg-sky-700 text-white text-xs font-semibold py-2.5 disabled:opacity-50 cursor-pointer">
+                {flightLookupBusy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                {flightLookupBusy ? 'Searching AeroAPI…' : 'Find scheduled flight'}
               </button>
-              <button
-                type="submit"
-                className="px-4 py-1.5 bg-sky-700 text-white rounded text-xs font-medium hover:bg-sky-800 transition-all cursor-pointer shadow-xs"
-              >
-                Add Flight
-              </button>
+            </form>
+
+            {flightLookupError && <p role="alert" className="text-xs text-red-700 rounded bg-red-50 border border-red-200 p-2">{flightLookupError}</p>}
+
+            {flightMatches.length > 0 && (
+              <div className="space-y-3">
+                <label className={LABEL}>FlightAware schedule {flightMatches.length > 1 ? '— select the matching service' : 'found'}</label>
+                <div className="space-y-2 max-h-56 overflow-y-auto">
+                  {flightMatches.map((flight, idx) => (
+                    <label key={`${flight.scheduledOut}_${flight.originCode}_${idx}`}
+                      className={`flex items-start gap-2 p-3 cursor-pointer rounded border text-xs ${selectedFlightIndex === idx ? 'border-sky-600 bg-sky-50' : 'border-[#e5e5e0] bg-white'}`}>
+                      <input type="radio" name="selectedFlight" className="mt-0.5" checked={selectedFlightIndex === idx}
+                        onChange={() => setSelectedFlightIndex(idx)} />
+                      <div className="space-y-1 min-w-0">
+                        <div className="font-semibold">{flight.originCode} → {flight.destinationCode}</div>
+                        <div>{flight.departureAirport} → {flight.arrivalAirport}</div>
+                        <div className="text-[#666666]">{flight.departureTime || 'Time unavailable'} → {flight.arrivalTime || 'Time unavailable'} (local airport times)</div>
+                        <div className="text-[#666666]">Departure terminal: {flight.departureTerminal || 'Not published'} · Gate: {flight.departureGate || 'Not assigned'}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={LABEL}>Seat number (optional)</label>
+                    <input type="text" placeholder="e.g. 14A" value={newFlight.seatNumber}
+                      onChange={e => setNewFlight(prev => ({ ...prev, seatNumber: e.target.value }))} className={FIELD} />
+                  </div>
+                  <div>
+                    <label className={LABEL}>Booking reference (optional)</label>
+                    <input type="text" placeholder="e.g. ABC123" value={newFlight.bookingRef}
+                      onChange={e => setNewFlight(prev => ({ ...prev, bookingRef: e.target.value }))} className={FIELD} />
+                  </div>
+                </div>
+                <p className="text-[11px] text-[#777777]">Terminal and gate depend on airline/airport reporting. Gate details are checked again automatically on flight day while the app is open. Seat and booking reference are visible to trip collaborators.</p>
+              </div>
+            )}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#e5e5e0]">
+              <button type="button" onClick={() => setShowAddFlightModal(false)} className="px-3 py-1.5 border border-[#e5e5e0] text-[#666666] rounded text-xs cursor-pointer">Cancel</button>
+              <button type="button" onClick={handleAddFlight} disabled={!flightMatches.length || flightLookupBusy}
+                className="px-4 py-1.5 bg-sky-700 text-white rounded text-xs font-medium disabled:opacity-40 cursor-pointer">Add Flight</button>
             </div>
-          </form>
+          </div>
         </div>
       )}
 
