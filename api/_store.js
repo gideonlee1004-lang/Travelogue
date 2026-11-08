@@ -82,26 +82,7 @@ export function createStore(getCollection) {
 
 // ---------- Real MongoDB connection (cached across warm serverless invocations) ----------
 
-// Local dev: load a .env / .env.local file if present (Node 20.6+). Variables that are
-// already set (e.g. by Vercel) are never overridden, and a missing file is fine.
-for (const file of ['.env.local', '.env']) {
-  try { process.loadEnvFile?.(file); } catch { /* no such file */ }
-}
-
-// Accepts the Atlas onboarding format:
-//   MONGODB_URI="mongodb+srv://user:pass@cluster0.xxxx.mongodb.net"
-// or a credential-less URI plus MONGODB_USERNAME / MONGODB_PASSWORD (URL-encoded here).
-export function resolveMongoUri(env = process.env) {
-  const uri = String(env.MONGODB_URI || '').trim().replace(/^["']|["']$/g, '');
-  if (!uri) return '';
-  const user = env.MONGODB_USERNAME, pass = env.MONGODB_PASSWORD;
-  if (user && pass && /^mongodb(\+srv)?:\/\/[^@/]+(\/|\?|$)/.test(uri)) {
-    return uri.replace(/^(mongodb(?:\+srv)?:\/\/)/, `$1${encodeURIComponent(user)}:${encodeURIComponent(pass)}@`);
-  }
-  return uri;
-}
-
-export const MONGODB_URI = resolveMongoUri();
+export const MONGODB_URI = process.env.MONGODB_URI || '';
 const DB_NAME = process.env.MONGODB_DB || 'travelogue';
 const COLLECTION = process.env.MONGODB_COLLECTION || 'records';
 

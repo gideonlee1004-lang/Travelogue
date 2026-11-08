@@ -88,11 +88,3 @@ test('connection and driver failures surface as StoreError without leaking detai
   const flaky = createStore(async () => ({ findOne: async () => { throw new Error('socket hang up secret'); } }));
   await assert.rejects(flaky.read('x'), err => err instanceof StoreError && !/secret/.test(err.message));
 });
-
-import { resolveMongoUri } from '../api/_store.js';
-test('resolveMongoUri handles Atlas env format', () => {
-  assert.equal(resolveMongoUri({ MONGODB_URI: '"mongodb+srv://u:p@c.mongodb.net"' }), 'mongodb+srv://u:p@c.mongodb.net');
-  assert.equal(resolveMongoUri({ MONGODB_URI: 'mongodb+srv://c.mongodb.net', MONGODB_USERNAME: 'u', MONGODB_PASSWORD: 'p@ss/1' }),
-    'mongodb+srv://u:p%40ss%2F1@c.mongodb.net');
-  assert.equal(resolveMongoUri({}), '');
-});
