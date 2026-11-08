@@ -1,5 +1,5 @@
 // Incremental co-editing responses. Keep the list of accessible shared pointers
-// authoritative, but only send trip bodies when their Blob ETag changed.
+// authoritative, but only send trip bodies when their revision changed.
 // We still read an uncached snapshot to enforce current membership on every poll.
 export async function collectTripUpdates(personal, userId, knownVersions, getShared, canRead, summary) {
   const pointers = (Array.isArray(personal) ? personal : [])

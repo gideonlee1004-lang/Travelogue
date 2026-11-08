@@ -67,7 +67,7 @@ async function apiRequest(url, options = {}) {
       headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
     });
   } catch (err) {
-    const e = new Error('Unable to connect to Vercel Blob. Please check your connection and try again.');
+    const e = new Error('Unable to connect to MongoDB Atlas. Please check your connection and try again.');
     e.network = true;
     throw e;
   }
@@ -80,7 +80,7 @@ async function apiRequest(url, options = {}) {
   }
 
   if (!response.ok) {
-    const e = new Error(data?.error || `Unable to connect to Vercel Blob (HTTP ${response.status}).`);
+    const e = new Error(data?.error || `Unable to connect to MongoDB Atlas (HTTP ${response.status}).`);
     e.status = response.status;
     throw e;
   }
@@ -611,7 +611,7 @@ export default function App() {
   const [joinBusy, setJoinBusy] = useState(false);
   const [joinError, setJoinError] = useState('');
 
-  // Restore session on page load (verifies against Vercel Blob)
+  // Restore session on page load (verifies against MongoDB Atlas)
   useEffect(() => {
     let active = true;
     authApi({ action: 'me' })
@@ -677,7 +677,7 @@ export default function App() {
           return baseTrip && !jsonEqual(baseTrip, trip) ? [{ trip, baseTrip }] : [];
         });
         // Independent trips can be saved together. Limit concurrency to avoid
-        // overwhelming Blob and retain the successful results if another fails.
+        // overwhelming the database and retain the successful results if another fails.
         for (let start = 0; start < dirtyShared.length; start += 4) {
           const batch = dirtyShared.slice(start, start + 4);
           const outcomes = await Promise.allSettled(batch.map(async ({ trip, baseTrip }) => {
@@ -718,7 +718,7 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [trips, currentUser, tripsLoaded, syncPulse, collabConflict]);
 
-  // Every 6 seconds, check shared ETags. Only changed trips cross the network.
+  // Every 6 seconds, check shared revisions. Only changed trips cross the network.
   // Unchanged polls do not trigger any React updates or JSON comparisons.
   useEffect(() => {
     if (!currentUser || !tripsLoaded) return;
@@ -927,7 +927,7 @@ export default function App() {
       setAuthForm({ email: '', password: '', name: '' });
       setCurrentUser(data.user);
     } catch (err) {
-      // Includes "unable to connect to Vercel Blob" - account creation is refused if Blob is down
+      // Includes "unable to connect to MongoDB Atlas" - account creation is refused if the database is down
       setAuthError(err.message);
     } finally {
       setAuthSubmitting(false);
@@ -1823,7 +1823,7 @@ export default function App() {
   if (authChecking) {
     return (
       <div className="min-h-screen bg-[#fbfbf9] flex items-center justify-center text-xs text-[#888888]">
-        Connecting to Vercel Blob...
+        Connecting to MongoDB Atlas...
       </div>
     );
   }
@@ -1962,7 +1962,7 @@ export default function App() {
       <div className="min-h-screen bg-[#fbfbf9] text-[#111111] flex flex-col justify-center items-center px-4 font-sans">
         <div className="w-full max-w-md bg-white border border-red-200 rounded-2xl p-6 space-y-4 shadow-sm text-center">
           <AlertTriangle className="w-8 h-8 mx-auto text-red-500" />
-          <h2 className="font-serif text-xl">Unable to connect to Vercel Blob</h2>
+          <h2 className="font-serif text-xl">Unable to connect to MongoDB Atlas</h2>
           <p className="text-xs text-[#666666] break-words">{dbError}</p>
           <div className="flex items-center justify-center space-x-2 text-xs">
             <button
@@ -2009,7 +2009,7 @@ export default function App() {
           <div className="flex items-center space-x-2 sm:space-x-4 ml-auto shrink-0 min-w-0 order-2 sm:order-3">
             <div className="hidden md:flex items-center space-x-1.5 text-[11px] text-[#666666] bg-[#f4f4f0] px-2.5 py-1 rounded border border-[#e5e5e0]">
               <Database className={`w-3.5 h-3.5 ${dbError ? 'text-red-500' : isDbSyncing ? 'text-amber-500 animate-spin' : 'text-emerald-600'}`} />
-              <span>Vercel Blob Storage:</span>
+              <span>MongoDB Atlas:</span>
               <span className="font-medium text-[#111111]">
                 {dbError ? 'Error' : isDbSyncing ? 'Syncing...' : `Synced @${currentUser.name}`}
               </span>

@@ -30,7 +30,7 @@ export default async function handler(req, res) {
       const session = readSession(req);
       if (!session) return send(res, 401, { error: 'Not signed in' });
 
-      // Confirm Blob is reachable and the account still exists
+      // Confirm the database is reachable and the account still exists
       const record = await readJson(userPathFor(session.email));
       if (!record) {
         clearSession(req, res);

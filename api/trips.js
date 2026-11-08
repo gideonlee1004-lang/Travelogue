@@ -48,7 +48,7 @@ export default async function handler(req, res) {
         return send(res, 400, { error: 'Invalid trip' });
       }
       // Validate all shared memberships in parallel instead of waiting for a
-      // separate Blob round trip per shared trip. No writes occur until ALL pass.
+      // separate database round trip per shared trip. No writes occur until ALL pass.
       const personal = await Promise.all(body.trips.map(async trip => {
         if (!trip.sharedId) return { ...trip, userId: session.id };
         const { value: doc } = await getShared(trip.sharedId);

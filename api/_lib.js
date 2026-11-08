@@ -1,37 +1,24 @@
 // Shared server-side helpers for Travelogue (Vercel Serverless Functions).
 // Files starting with "_" inside /api are NOT exposed as routes.
 import crypto from 'node:crypto';
-import { put, get, head, BlobPreconditionFailedError } from '@vercel/blob';
-import { readConsistentBlobSnapshot, SnapshotReadError } from './_blobSnapshot.js';
+import { createStore, getMongoCollection, isConfigured, MONGODB_URI, StoreError, ConflictError } from './_store.js';
 
-// Your Vercel integration prefix is "TRAVELOGUE_DB", so the token variable is
-// TRAVELOGUE_DB_READ_WRITE_TOKEN (not the default BLOB_READ_WRITE_TOKEN).
-const TOKEN = process.env.TRAVELOGUE_DB_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN || '';
+export { StoreError, ConflictError };
+
+// Sessions are signed with SESSION_SECRET (recommended). If it is not set, a key
+// is derived from MONGODB_URI so existing deployments keep working.
+const SESSION_SECRET = process.env.SESSION_SECRET || MONGODB_URI;
 
 const COOKIE_NAME = 'tl_session';
 const SESSION_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
-export class StoreError extends Error {}
-export class ConflictError extends Error {}
+const store = createStore(getMongoCollection);
 
-function ensureConfigured() {
-  if (!TOKEN) {
-    throw new StoreError(
-      'Unable to connect to Vercel Blob: TRAVELOGUE_DB_READ_WRITE_TOKEN is not configured on the server.'
-    );
-  }
-}
+// ---------- MongoDB Atlas read / write ----------
+// Record paths ("users/<hash>", "trips/<userId>", "shared/<id>") are used as _id.
 
-// ---------- Blob read / write (private store) ----------
-
-export async function readJsonWithMeta(pathname, { requireEtag = false } = {}) {
-  ensureConfigured();
-  try {
-    return await readConsistentBlobSnapshot(pathname, { token: TOKEN, getFn: get, headFn: head, requireEtag });
-  } catch (err) {
-    if (err instanceof SnapshotReadError) throw new StoreError(err.message);
-    throw err;
-  }
+export async function readJsonWithMeta(pathname) {
+  return store.read(pathname);
 }
 
 export async function readJson(pathname) {
@@ -39,66 +26,36 @@ export async function readJson(pathname) {
 }
 
 export async function writeJson(pathname, data, { overwrite = true, ifMatch } = {}) {
-  ensureConfigured();
-  try {
-    return await put(pathname, JSON.stringify(data), {
-      access: 'private', token: TOKEN, contentType: 'application/json',
-      addRandomSuffix: false, allowOverwrite: overwrite,
-      ...(ifMatch ? { ifMatch } : {})
-    });
-  } catch (err) {
-    const message = String(err?.message || '');
-    if (err instanceof BlobPreconditionFailedError ||
-        ['BlobPreconditionFailedError', 'BlobAlreadyExistsError', 'BlobConflictError'].includes(err?.name) ||
-        [409, 412].includes(err?.status) || [409, 412].includes(err?.statusCode) ||
-        /already exists|precondition failed|conflict/i.test(message)) {
-      // Preserve only safe diagnostics. Never log JSON, usernames, blob paths, or tokens.
-      const conflict = new ConflictError('Record was modified by another request');
-      conflict.blobCode = err?.status ?? err?.statusCode ?? null;
-      conflict.blobName = String(err?.name || 'UnknownBlobError');
-      conflict.blobReason = /already exists/i.test(message) ? 'already_exists' :
-        /precondition failed/i.test(message) ? 'precondition_failed' :
-        'conflict';
-      throw conflict;
-    }
-    throw new StoreError(`Unable to connect to Vercel Blob: ${err?.message || 'unknown error'}`);
-  }
+  return store.write(pathname, data, { overwrite, ifMatch });
+}
+
+export async function deleteJson(pathname, { ifMatch } = {}) {
+  return store.remove(pathname, { ifMatch });
 }
 
 // Atomic read-modify-write with optimistic concurrency control.
-// Prefer a same-response ETag, with a verified HEAD/GET/HEAD fallback if missing.
-// Conditional put() ensures another editor cannot be silently overwritten.
+// The conditional write only succeeds if nobody changed the record since we read it.
 export async function updateJson(pathname, mutate, retries = 6) {
-  ensureConfigured();
   const recordType = pathname.split('/')[0];
-  const reasons = {};
   for (let i = 0; i < retries; i++) {
-    const { value, etag } = await readJsonWithMeta(pathname, { requireEtag: true });
+    const { value, etag } = await readJsonWithMeta(pathname);
     const next = await mutate(value);
     if (next === undefined || JSON.stringify(next) === JSON.stringify(value)) {
-      // Avoid unnecessary version bumps that provoke ETag conflicts in other tabs.
+      // Avoid unnecessary version bumps that provoke conflicts in other tabs.
       return { value, etag };
     }
     try {
-      const written = await writeJson(pathname, next, {
-        overwrite: !!etag, ifMatch: etag
-      });
+      // Existing record: compare-and-set on its revision. New record: create-only.
+      const written = await writeJson(pathname, next, { overwrite: !!etag, ifMatch: etag || undefined });
       return { value: next, etag: written.etag };
     } catch (err) {
       if (!(err instanceof ConflictError)) throw err;
-      // Another writer won the race. Re-read origin and re-run the mutation;
-      // never retry the same stale ETag or retry an unconditional overwrite.
+      // Another writer won the race: re-read and re-run the mutation.
       if (i + 1 < retries) await new Promise(resolve => setTimeout(resolve, 40 * (i + 1)));
-      const reason = err.blobReason || 'conflict';
-      reasons[reason] = (reasons[reason] || 0) + 1;
-      console.warn('[Travelogue] Blob conditional write rejected', {
-        recordType, attempt: i + 1, reason
-      });
+      console.warn('[Travelogue] Conditional write rejected', { recordType, attempt: i + 1 });
     }
   }
-  console.warn('[Travelogue] Blob write conflicts exhausted', {
-    recordType, attempts: retries, reasons
-  });
+  console.warn('[Travelogue] Write conflicts exhausted', { recordType, attempts: retries });
   throw new ConflictError('Too many concurrent changes. Please try again.');
 }
 
@@ -134,7 +91,7 @@ export function tripsPathFor(userId) {
 // ---------- Session cookie (HttpOnly, signed; nothing stored in browser storage) ----------
 
 function sessionKey() {
-  return crypto.createHash('sha256').update(`travelogue-session:${TOKEN}`).digest();
+  return crypto.createHash('sha256').update(`travelogue-session:${SESSION_SECRET}`).digest();
 }
 
 function sign(payload) {
@@ -151,7 +108,7 @@ function parseCookies(header = '') {
 }
 
 export function readSession(req) {
-  if (!TOKEN) return null;
+  if (!isConfigured()) return null;
   const raw = parseCookies(req.headers.cookie || '')[COOKIE_NAME];
   if (!raw) return null;
 

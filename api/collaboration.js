@@ -1,15 +1,13 @@
-// Co-editing for signed-in Travelogue accounts; private Vercel Blob + ETag CAS.
+// Co-editing for signed-in Travelogue accounts; MongoDB Atlas + revision-based compare-and-set.
 // GET ?sharedId=... ; POST {action,...}; PUT {sharedId,baseTrip,trip,conflictMode?}.
 import crypto from 'node:crypto';
-import { del } from '@vercel/blob';
 import {
-  StoreError, ConflictError, readJson, writeJson, updateJson, tripsPathFor,
+  StoreError, ConflictError, readJson, writeJson, deleteJson, updateJson, tripsPathFor,
   sharedPathFor, readSession, send
 } from './_lib.js';
 import { mergeTrip, MergeConflict } from './_merge.js';
 import { getShared, canRead, memberRole, summary, pointer } from './_shared.js';
 
-const token = process.env.TRAVELOGUE_DB_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN || '';
 const privateTripPath = userId => tripsPathFor(userId);
 const parse = req => typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
 const safeTrip = (trip, original, shareId) => {
@@ -68,7 +66,7 @@ export default async function handler(req, res) {
         return send(res, 400, { error: 'Trip and baseTrip must refer to the same trip.' });
       }
       for (let i = 0; i < 6; i++) {
-        const { value: doc, etag } = await getShared(body.sharedId, { requireEtag: true });
+        const { value: doc, etag } = await getShared(body.sharedId);
         if (!doc || !canRead(doc, session.id)) return send(res, 403, { error: 'Access to this trip was removed.' });
         if (doc.trip.id !== body.trip.id) return send(res, 400, { error: 'Trip identifier mismatch.' });
         let nextTrip;
@@ -197,11 +195,11 @@ export default async function handler(req, res) {
     }
 
     if (action === 'stop') {
-      const { value: doc, etag } = await getShared(sharedId, { requireEtag: true });
+      const { value: doc, etag } = await getShared(sharedId);
       if (!doc || memberRole(doc, session.id) !== 'owner') return send(res, 403, { error: 'Only the owner can stop sharing.' });
-      // Delete with ETag so no concurrent edit is inadvertently removed.
+      // Delete only if unchanged so no concurrent edit is inadvertently removed.
       try {
-        await del(sharedPathFor(sharedId), { token, ifMatch: etag });
+        await deleteJson(sharedPathFor(sharedId), { ifMatch: etag });
       } catch (err) {
         return send(res, 409, { error: 'Trip changed just now. Try again.' });
       }
