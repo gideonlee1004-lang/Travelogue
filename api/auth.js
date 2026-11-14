@@ -5,7 +5,6 @@ import {
   ConflictError,
   readJson,
   writeJson,
-  updateJson,
   userPathFor,
   hashPassword,
   verifyPassword,
@@ -38,28 +37,6 @@ export default async function handler(req, res) {
         return send(res, 401, { error: 'Invalid Account or Password' });
       }
       return send(res, 200, { user: publicUser(record) });
-    }
-
-    if (action === 'updateProfile') {
-      const session = readSession(req);
-      if (!session) return send(res, 401, { error: 'Not signed in' });
-      const name = String(body.name || '').trim();
-      if (!name || name.length > 80) return send(res, 400, { error: 'Display name must contain 1–80 characters.' });
-      const trimField = (key, max) => String(body[key] || '').trim().slice(0, max);
-      const avatarUrl = trimField('avatarUrl', 1000);
-      if (avatarUrl && !/^https:\/\/[^\s]+$/i.test(avatarUrl)) {
-        return send(res, 400, { error: 'Profile photo must be a valid HTTPS URL.' });
-      }
-      const path = userPathFor(session.email);
-      const result = await updateJson(path, record => {
-        if (!record || record.id !== session.id) throw new Error('Account not found');
-        return { ...record, name, profile: {
-          bio: trimField('bio', 240), homeBase: trimField('homeBase', 100),
-          travelStyle: trimField('travelStyle', 100), interests: trimField('interests', 160), avatarUrl
-        }};
-      });
-      setSession(req, res, result.value);
-      return send(res, 200, { user: publicUser(result.value) });
     }
 
     const email = String(body.email || '').trim().toLowerCase();
@@ -113,7 +90,7 @@ export default async function handler(req, res) {
 }
 
 function publicUser(u) {
-  return { id: u.id, email: u.email, name: u.name, profile: u.profile || {} };
+  return { id: u.id, email: u.email, name: u.name };
 }
 
 function safeParse(s) {

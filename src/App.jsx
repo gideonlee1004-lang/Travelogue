@@ -1,29 +1,37 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Plus, Trash2, Sparkles, Search, ArrowUp, ArrowDown, Globe, ExternalLink, BookmarkPlus, Bookmark, Check, RefreshCw, AlertTriangle, Star, Layers, Footprints, Car, Bus, Plane, Hotel, Pin, Pen, User, LogOut, Lock, Mail, Database, CheckCircle2, Calendar, Users, Link2, Copy, UserMinus, X, ChevronDown, House, MapPin, Compass, Utensils, BookOpen, Route, BedDouble, Settings, MapPinned, List, ArrowRight, ArrowUpRight, Clock3, Map as MapIcon, Pencil, CheckCircle, Navigation, Coffee, Leaf, Image as ImageIcon, CalendarDays, Send, ChevronRight, ShieldCheck, Bell, Globe2, Heart, Eye, ChevronLeft } from 'lucide-react';
-import { GoogleMap, useJsApiLoader, MarkerF, PolylineF } from '@react-google-maps/api';
+import { Plus, Trash2, Search, RefreshCw, AlertTriangle, Plane, Hotel, Pen, User, Lock, Mail, Database, CheckCircle2, Calendar, Users, Link2, Copy, UserMinus, X, Globe, BookmarkPlus } from 'lucide-react';
+import { useJsApiLoader } from '@react-google-maps/api';
 import { mergeTrip } from '../api/_merge.js';
-import { OverviewStudio, SavedPlacesStudio, ItineraryStudio, ProfileStudio } from './ZenStudio.jsx';
+import { TopNav, HeroArt, BrandMark } from './components/Shell.jsx';
+import OverviewPage from './pages/OverviewPage.jsx';
+import SavedPlacesPage from './pages/SavedPlacesPage.jsx';
+import ItineraryPage from './pages/ItineraryPage.jsx';
+import FlightsPage from './pages/FlightsPage.jsx';
+import ProfilePage from './pages/ProfilePage.jsx';
+import {
+  sortStopsByTime, renderPriceLevel, getDayDateString, calculateDaysCount, getEndDateString, haversineKm, addMinutes
+} from './lib/helpers.js';
 
 const LIBRARIES = ['places'];
 
 // ---- Shared form-control styles (every text box / select / date / time uses these) ----
 const FIELD_BASE =
-  'w-full min-w-0 border border-[#e5e1d7] rounded-lg text-base sm:text-sm text-[#273c32] placeholder:text-[#aab2a7] ' +
-  'focus:outline-none focus:border-[#648472] focus:ring-2 focus:ring-[#648472]/10 transition-colors appearance-none text-left';
-const FIELD = `${FIELD_BASE} bg-white h-11 px-3.5`;
-const FIELD_ICON = `${FIELD_BASE} bg-white h-11 pl-10 pr-3`; // input with a leading icon
-const FIELD_DISABLED = `${FIELD_BASE} bg-[#f0eee7] text-[#a4aca2] h-10 px-3 cursor-not-allowed`;
-const TEXTAREA = `${FIELD_BASE} bg-white px-3.5 py-3`;
-const SELECT = `${FIELD_BASE} bg-white h-11 pl-3.5 pr-9 cursor-pointer`;
+  'w-full min-w-0 border border-line rounded-lg text-base sm:text-sm text-ink placeholder:text-ink-3 ' +
+  'focus:outline-none focus:border-sage transition-colors appearance-none text-left';
+const FIELD = `${FIELD_BASE} bg-paper h-10 px-3`;
+const FIELD_ICON = `${FIELD_BASE} bg-paper h-10 pl-9 pr-3`; // input with a leading icon
+const FIELD_DISABLED = `${FIELD_BASE} bg-cream-2 text-ink-3 h-10 px-3 cursor-not-allowed`;
+const TEXTAREA = `${FIELD_BASE} bg-paper px-3 py-2`;
+const SELECT = `${FIELD_BASE} bg-paper h-10 pl-3 pr-9 cursor-pointer`;
 const SELECT_STYLE = {
   backgroundImage: `url("data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#899489" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>'
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#888888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>'
   )}")`,
   backgroundRepeat: 'no-repeat',
   backgroundPosition: 'right 0.75rem center',
   backgroundSize: '1rem'
 };
-const LABEL = 'block text-[11px] font-semibold tracking-[0.035em] text-[#67766b] mb-1.5';
+const LABEL = 'block text-xs font-medium text-ink-2 mb-1';
 
 // Google's place-search web component renders inside a shadow DOM, so we theme it
 // with CSS variables to sit next to the other fields.
@@ -32,38 +40,15 @@ gmp-place-autocomplete.travelogue-place-autocomplete {
   display: block;
   width: 100%;
   color-scheme: light;
-  --gmp-mat-color-surface: #ffffff;
-  --gmp-mat-color-on-surface: #273c32;
-  --gmp-mat-color-on-surface-variant: #67766b;
-  --gmp-mat-color-outline: #e5e1d7;
-  --gmp-mat-color-outline-decorative: #e5e1d7;
-  --gmp-mat-color-primary: #273c32;
+  --gmp-mat-color-surface: #fffdf8;
+  --gmp-mat-color-on-surface: #2d2924;
+  --gmp-mat-color-on-surface-variant: #666666;
+  --gmp-mat-color-outline: #e6dfd0;
+  --gmp-mat-color-outline-decorative: #e6dfd0;
+  --gmp-mat-color-primary: #55663f;
   --gmp-mat-font-family: inherit;
 }
 `;
-
-const MAP_CONTAINER_STYLE = {
-  width: '100%',
-  height: '100%'
-};
-
-const DEFAULT_MAP_OPTIONS = {
-  disableDefaultUI: true,
-  zoomControl: true,
-  styles: [
-    { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-    { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-    { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#d9ddcf' }] },
-    { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f1f2e9' }] },
-    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9dcd7' }] },
-    { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#668c88' }] },
-    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-    { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e0e5d9' }] },
-    { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#89948b' }] },
-    { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#e5e6cf' }] },
-    { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#dae6d7' }] }
-  ]
-};
 
 async function apiRequest(url, options = {}) {
   let response;
@@ -126,354 +111,6 @@ const pollUserItineraries = knownVersions => apiRequest('/api/trips', {
   method: 'POST', body: JSON.stringify({ action: 'poll', knownVersions })
 });
 
-// Soft custom map pins, each anchored at its point of interest.
-// Data is unchanged; markers still use Google Maps coordinates and titles.
-function editorialPin(fill, symbol = '•') {
-  const safeSymbol = symbol === '✦' ? '✦' : '•';
-  return {
-    url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="44" height="55" viewBox="0 0 44 55"><path d="M22 2C10.7 2 2 10.7 2 22c0 15 20 30 20 30S42 37 42 22C42 10.7 33.3 2 22 2Z" fill="${fill}" stroke="#fffaf3" stroke-width="2.8"/><circle cx="22" cy="21" r="11" fill="#fffaf3" opacity=".96"/><text x="22" y="26" font-size="17" font-family="Arial" text-anchor="middle" fill="${fill}">${safeSymbol}</text></svg>`),
-    scaledSize: { width: 39, height: 49 },
-    anchor: { x: 19.5, y: 47 },
-    labelOrigin: { x: 19.5, y: 18.5 }
-  };
-}
-const BLUE_SAVED_PLACE_PIN = editorialPin('#728b76', '✦');
-const SAVED_PIN_VARIANTS = {
-  'Places to Visit': BLUE_SAVED_PLACE_PIN,
-  'Food & Eats': editorialPin('#ba815a','✦'),
-  'Experiences': editorialPin('#869665','✦'),
-  'Stays/Hotel': editorialPin('#a18c71','✦'),
-  'Flights': editorialPin('#668d9a','✦')
-};
-const getSavedPin = category => SAVED_PIN_VARIANTS[category] || BLUE_SAVED_PLACE_PIN;
-const DARK_ITINERARY_PIN = editorialPin('#bb714c');
-const STAY_HOTEL_PIN = editorialPin('#a38b66');
-const getCategoryIcon = (category) => {
-  if (category === 'Food & Eats') return Utensils;
-  if (category === 'Stays/Hotel') return BedDouble;
-  if (category === 'Flights') return Plane;
-  if (category === 'Experiences') return Compass;
-  return MapPin;
-};
-
-// Calculate quadratic curved points for flight path arc
-function getCurvedPath(dep, arr, numPoints = 50) {
-  if (!dep || !arr || dep.lat == null || dep.lng == null || arr.lat == null || arr.lng == null) return [];
-  const lat1 = Number(dep.lat);
-  const lng1 = Number(dep.lng);
-  const lat2 = Number(arr.lat);
-  const lng2 = Number(arr.lng);
-
-  const midLat = (lat1 + lat2) / 2;
-  const midLng = (lng1 + lng2) / 2;
-
-  const dx = lng2 - lng1;
-  const dy = lat2 - lat1;
-
-  const curvature = 0.25;
-  const controlLat = midLat - dx * curvature;
-  const controlLng = midLng + dy * curvature;
-
-  const points = [];
-  for (let i = 0; i <= numPoints; i++) {
-    const t = i / numPoints;
-    const lat = (1 - t) * (1 - t) * lat1 + 2 * (1 - t) * t * controlLat + t * t * lat2;
-    const lng = (1 - t) * (1 - t) * lng1 + 2 * (1 - t) * t * controlLng + t * t * lng2;
-    points.push({ lat, lng });
-  }
-  return points;
-}
-
-// Sort stops chronologically by scheduled time ("HH:mm")
-function sortStopsByTime(stops) {
-  if (!Array.isArray(stops)) return [];
-  return [...stops].sort((a, b) => {
-    const timeA = a.time || '00:00';
-    const timeB = b.time || '00:00';
-    return timeA.localeCompare(timeB);
-  });
-}
-
-// Helper to group consecutive days for the same stay
-function getGroupedStays(staysByDay, daysCount) {
-  if (!staysByDay || !daysCount) return [];
-  const groups = [];
-  let currentGroup = null;
-
-  for (let d = 1; d <= daysCount; d++) {
-    const stay = staysByDay[d];
-    if (!stay) {
-      if (currentGroup) {
-        groups.push(currentGroup);
-        currentGroup = null;
-      }
-      continue;
-    }
-
-    if (currentGroup && currentGroup.stay.name === stay.name && currentGroup.stay.address === stay.address) {
-      currentGroup.endDay = d;
-    } else {
-      if (currentGroup) groups.push(currentGroup);
-      currentGroup = { startDay: d, endDay: d, stay };
-    }
-  }
-  if (currentGroup) groups.push(currentGroup);
-
-  return groups.map(g => ({
-    dayLabel: g.startDay === g.endDay ? `Day ${g.startDay}` : `Days ${g.startDay}–${g.endDay}`,
-    stay: g.stay
-  }));
-}
-
-// ---- Travel time (Google Routes v2 REST API) ----
-const TRAVEL_MODES = [
-  { key: 'WALK', label: 'Walk', Icon: Footprints },
-  { key: 'TRANSIT', label: 'Transit', Icon: Bus },
-  { key: 'DRIVE', label: 'Car', Icon: Car }
-];
-
-const travelCache = new Map();
-
-function formatDuration(seconds) {
-  if (seconds == null) return '–';
-  const mins = Math.max(1, Math.round(seconds / 60));
-  if (mins < 60) return `${mins} min`;
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return m ? `${h} h ${m} min` : `${h} h`;
-}
-
-function formatDistance(meters) {
-  if (meters == null) return '';
-  return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`;
-}
-
-async function fetchTravel(from, to, mode, departure) {
-  const key = `${from.lat},${from.lng}|${to.lat},${to.lng}|${mode.key}|${departure ? departure.getTime() : ''}`;
-  if (travelCache.has(key)) return travelCache.get(key);
-
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-  if (!apiKey) return null;
-
-  const modeMap = {
-    WALK: 'WALK',
-    TRANSIT: 'TRANSIT',
-    DRIVE: 'DRIVE'
-  };
-
-  try {
-    const body = {
-      origin: { location: { latLng: { latitude: Number(from.lat), longitude: Number(from.lng) } } },
-      destination: { location: { latLng: { latitude: Number(to.lat), longitude: Number(to.lng) } } },
-      travelMode: modeMap[mode.key] || 'DRIVE'
-    };
-
-    if (mode.key === 'TRANSIT' && departure) {
-      body.departureTime = departure.toISOString();
-    }
-
-    const response = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': apiKey,
-        'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters'
-      },
-      body: JSON.stringify(body)
-    });
-
-    const data = await response.json();
-    const route = data.routes?.[0];
-
-    let result = null;
-    if (route) {
-      const seconds = parseInt(route.duration?.replace('s', '') || '0', 10);
-      const meters = route.distanceMeters || 0;
-      result = { seconds, meters };
-    }
-
-    travelCache.set(key, result);
-    return result;
-  } catch (e) {
-    console.error('Routes API call failed:', e);
-    travelCache.set(key, null);
-    return null;
-  }
-}
-
-function TravelTimeBar({ from, to, departure }) {
-  const [data, setData] = useState({});
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    Promise.all(TRAVEL_MODES.map(m => fetchTravel(from, to, m, departure))).then(results => {
-      if (cancelled) return;
-      const next = {};
-      TRAVEL_MODES.forEach((m, i) => { next[m.key] = results[i]; });
-      setData(next);
-      setLoading(false);
-    });
-    return () => { cancelled = true; };
-  }, [from.lat, from.lng, to.lat, to.lng, departure ? departure.getTime() : null]);
-
-  const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lng}&destination=${to.lat},${to.lng}`;
-
-  return (
-    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 sm:gap-2 ml-1 sm:ml-3 pl-3 sm:pl-6 border-l-2 border-dashed border-[#e5e1d7] py-1.5 text-[11px] text-[#56665a]">
-      <div className="flex items-center flex-wrap gap-x-3 gap-y-1">
-        {TRAVEL_MODES.map(({ key, label, Icon }) => (
-          <span key={key} className="flex items-center space-x-1" title={data[key] ? formatDistance(data[key].meters) : ''}>
-            <Icon className="w-3.5 h-3.5 text-[#899489]" />
-            <span className="text-[#899489]">{label}:</span>
-            <span className="font-medium text-[#273c32]">
-              {loading ? '…' : data[key] ? formatDuration(data[key].seconds) : 'n/a'}
-            </span>
-          </span>
-        ))}
-      </div>
-      <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="text-[#899489] hover:text-[#273c32] shrink-0 font-medium">
-        Directions
-      </a>
-    </div>
-  );
-}
-
-function getDepartureDate(dateStr, timeStr) {
-  if (!dateStr) return null;
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const [hh, mm] = (timeStr || '12:00').split(':').map(Number);
-  if (!y || !m || !d) return null;
-  const date = new Date(y, m - 1, d, hh || 0, mm || 0);
-  return date.getTime() > Date.now() ? date : new Date();
-}
-
-function renderPriceLevel(priceLevel) {
-  if (typeof priceLevel === 'string') {
-    switch (priceLevel) {
-      case 'INEXPENSIVE': return '$';
-      case 'MODERATE': return '$$';
-      case 'EXPENSIVE': return '$$$';
-      case 'VERY_EXPENSIVE': return '$$$$';
-      case 'FREE': return 'Free';
-      case 'PRICE_LEVEL_INEXPENSIVE': return '$';
-      case 'PRICE_LEVEL_MODERATE': return '$$';
-      case 'PRICE_LEVEL_EXPENSIVE': return '$$$';
-      case 'PRICE_LEVEL_VERY_EXPENSIVE': return '$$$$';
-      case 'PRICE_LEVEL_FREE': return 'Free';
-      default: return priceLevel;
-    }
-  }
-  if (typeof priceLevel === 'number') {
-    return '$'.repeat(Math.max(1, priceLevel));
-  }
-  return null;
-}
-
-function formatOpeningHours(openingHours) {
-  if (!openingHours) return [];
-  return openingHours.weekdayDescriptions || [];
-}
-
-function getTodayOpeningHours(openingHours, date = new Date()) {
-  const descriptions = formatOpeningHours(openingHours);
-  if (!descriptions.length) return null;
-  return descriptions[date.getDay() === 0 ? 6 : date.getDay() - 1] || null;
-}
-
-function getDayDate(startDateStr, dayNumber) {
-  if (!startDateStr) return null;
-  const [year, month, day] = startDateStr.split('-').map(Number);
-  if (!year || !month || !day) return null;
-  return new Date(year, month - 1, day + (dayNumber - 1));
-}
-
-function formatDayDate(startDateStr, dayNumber, includeYear = false) {
-  const date = getDayDate(startDateStr, dayNumber);
-  if (!date || isNaN(date.getTime())) return '';
-  return date.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    ...(includeYear ? { year: 'numeric' } : {})
-  });
-}
-
-function getDayDateString(startDateStr, dayNumber) {
-  const date = getDayDate(startDateStr, dayNumber);
-  if (!date || isNaN(date.getTime())) return startDateStr;
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const dd = String(date.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function calculateDaysCount(startDateStr, endDateStr) {
-  if (!startDateStr || !endDateStr) return 1;
-  const [sY, sM, sD] = startDateStr.split('-').map(Number);
-  const [eY, eM, eD] = endDateStr.split('-').map(Number);
-  if (!sY || !sM || !sD || !eY || !eM || !eD) return 1;
-  const start = new Date(sY, sM - 1, sD);
-  const end = new Date(eY, eM - 1, eD);
-  const diffTime = end - start;
-  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
-  return diffDays > 0 ? diffDays : 1;
-}
-
-function getEndDateString(startDateStr, daysCount) {
-  if (!startDateStr || !daysCount) return startDateStr;
-  const date = getDayDate(startDateStr, daysCount);
-  if (!date || isNaN(date.getTime())) return startDateStr;
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const dd = String(date.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function checkIsClosed(timeStr, openingHours, dateStr) {
-  if (!openingHours || !openingHours.periods || !timeStr) return false;
-
-  if (
-    openingHours.periods.length === 1 &&
-    openingHours.periods[0].open &&
-    !openingHours.periods[0].close
-  ) {
-    return false;
-  }
-
-  let dayOfWeek;
-  if (dateStr) {
-    const [year, month, day] = dateStr.split('-').map(Number);
-    dayOfWeek = new Date(year, month - 1, day).getDay();
-  } else {
-    dayOfWeek = new Date().getDay();
-  }
-
-  const dayPeriods = openingHours.periods.filter(p => p.open && p.open.day === dayOfWeek);
-  if (dayPeriods.length === 0) return true;
-
-  const [hours, minutes] = timeStr.split(':').map(Number);
-  const scheduledMinutes = hours * 60 + (minutes || 0);
-
-  const isOpen = dayPeriods.some(period => {
-    if (!period.open) return false;
-    if (!period.close) return true;
-
-    const openMin = period.open.hour * 60 + (period.open.minute || 0);
-    const closeMin = period.close.hour * 60 + (period.close.minute || 0);
-
-    if (openMin === closeMin) return true;
-
-    if (closeMin < openMin) {
-      return scheduledMinutes >= openMin || scheduledMinutes <= closeMin;
-    }
-    return scheduledMinutes >= openMin && scheduledMinutes <= closeMin;
-  });
-
-  return !isOpen;
-}
-
 function PlaceAutocomplete({ onPlaceSelected, placeholder = 'Search for a place...' }) {
   const containerRef = useRef(null);
   const onPlaceSelectedRef = useRef(onPlaceSelected);
@@ -516,7 +153,8 @@ function PlaceAutocomplete({ onPlaceSelected, placeholder = 'Search for a place.
                 'types',
                 'rating',
                 'priceLevel',
-                'regularOpeningHours'
+                'regularOpeningHours',
+                'photos'
               ]
             });
 
@@ -529,7 +167,8 @@ function PlaceAutocomplete({ onPlaceSelected, placeholder = 'Search for a place.
               types: place.types || [],
               rating: place.rating || null,
               priceLevel: place.priceLevel || null,
-              openingHours: place.regularOpeningHours || null
+              openingHours: place.regularOpeningHours || null,
+              photoUrl: place.photos?.[0]?.getURI ? place.photos[0].getURI({ maxWidth: 900 }) : null
             });
           } catch (error) {
             console.error('Error getting place details:', error);
@@ -802,19 +441,17 @@ export default function App() {
 
   const [activeTripId, setActiveTripId] = useState(null);
   const [activeDay, setActiveDay] = useState(null);
-  const [screen, setScreen] = useState('overview');
-  const [placeDisplay, setPlaceDisplay] = useState('map');
-  const [showPlanningTools, setShowPlanningTools] = useState(false);
-  const [profileEditing, setProfileEditing] = useState(false);
-  const [profileSaving, setProfileSaving] = useState(false);
-  const [profileNotice, setProfileNotice] = useState('');
-  const [profileDraft, setProfileDraft] = useState({ name: '', bio: '', homeBase: '', avatarUrl: '', travelStyle: 'Thoughtful explorer', interests: 'Nature, local food, culture' });
-  const goTo = (destination, day = undefined) => {
-    setScreen(destination);
-    if (destination === 'places' || destination === 'overview') setActiveDay(null);
-    else if (day !== undefined) setActiveDay(day);
+  const [page, setPage] = useState(() => {
+    const p = new URLSearchParams(window.location.search).get('page');
+    return ['overview', 'saved', 'itinerary', 'flights', 'profile'].includes(p) ? p : 'overview';
+  });
+  const navigate = useCallback((next) => {
+    setPage(next);
+    const url = new URL(window.location.href);
+    if (next === 'overview') url.searchParams.delete('page'); else url.searchParams.set('page', next);
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  }, []);
   const [filterCategory, setFilterCategory] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -822,7 +459,6 @@ export default function App() {
   const [isRecLoading, setIsRecLoading] = useState(false);
 
   const [recCategory, setRecCategory] = useState('Places to Visit');
-  const [showDiscovery, setShowDiscovery] = useState(false);
 
   const [showNewPlaceModal, setShowNewPlaceModal] = useState(false);
   const [newPlace, setNewPlace] = useState({
@@ -836,8 +472,7 @@ export default function App() {
     rating: null,
     priceInfo: '',
     openingHours: null,
-    types: [],
-    googleId: null
+    types: []
   });
 
   const [showAddStopModal, setShowAddStopModal] = useState(false);
@@ -911,8 +546,6 @@ export default function App() {
     endDate: ''
   });
 
-  const [map, setMap] = useState(null);
-
   // Set active trip default on load
   useEffect(() => {
     if (trips.length > 0 && !trips.some(t => t.id === activeTripId)) {
@@ -921,36 +554,6 @@ export default function App() {
   }, [trips, activeTripId]);
 
   const activeTrip = trips.find(t => t.id === activeTripId) || null;
-  const profile = currentUser?.profile || {};
-  const userInitials = (currentUser?.name || 'T').trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
-  const flightsByDay = activeTrip ? Object.entries(activeTrip.schedule || {}).flatMap(([day, stops]) =>
-    (stops || []).filter(stop => stop.isFlight).map(flight => ({ day: Number(day), flight })))
-    .sort((a,b) => String(a.flight.scheduledOut || a.flight.flightDate || '').localeCompare(String(b.flight.scheduledOut || b.flight.flightDate || ''))) : [];
-  const allSavedCount = trips.reduce((sum, trip) => sum + (trip.savedPlaces?.length || 0), 0);
-  const totalFlightCount = trips.reduce((sum, trip) => sum + Object.values(trip.schedule || {}).flat().filter(item => item.isFlight).length, 0);
-  const tripStays = activeTrip ? getGroupedStays(activeTrip.staysByDay || {}, activeTrip.daysCount) : [];
-
-  const openProfileEditor = () => {
-    setProfileDraft({
-      name: currentUser?.name || '', bio: profile.bio || '', homeBase: profile.homeBase || '',
-      avatarUrl: profile.avatarUrl || '', travelStyle: profile.travelStyle || 'Thoughtful explorer',
-      interests: profile.interests || 'Nature, local food, culture'
-    });
-    setProfileNotice('');
-    setProfileEditing(true);
-  };
-  const handleProfileSave = async (event) => {
-    event.preventDefault();
-    setProfileSaving(true);
-    setProfileNotice('');
-    try {
-      const updated = await authApi({ action: 'updateProfile', ...profileDraft });
-      setCurrentUser(updated.user);
-      setProfileEditing(false);
-      setProfileNotice('Your profile has been updated.');
-    } catch (error) { setProfileNotice(error.message); }
-    finally { setProfileSaving(false); }
-  };
 
   const activeTripName = activeTrip?.name;
   const activeTripLat = activeTrip?.center?.[0];
@@ -1015,7 +618,7 @@ export default function App() {
         textQuery: `${cfg.query} in ${activeTripName}`,
         fields: [
           'id', 'displayName', 'formattedAddress', 'location', 'rating',
-          'userRatingCount', 'priceLevel', 'regularOpeningHours', 'types', 'editorialSummary'
+          'userRatingCount', 'priceLevel', 'regularOpeningHours', 'types', 'editorialSummary', 'photos'
         ],
         maxResultCount: 10,
         ...(cfg.type ? { includedType: cfg.type } : {}),
@@ -1042,7 +645,8 @@ export default function App() {
           rating: p.rating || null,
           priceInfo: renderPriceLevel(p.priceLevel) || '',
           openingHours: p.regularOpeningHours || null,
-          types: p.types || []
+          types: p.types || [],
+          photoUrl: p.photos?.[0]?.getURI ? p.photos[0].getURI({ maxWidth: 900 }) : null
         }));
 
       setRecommendations(results);
@@ -1060,80 +664,6 @@ export default function App() {
     }
   }, [activeTripId, isLoaded, fetchRecommendations]);
 
-  const onLoadMap = useCallback((mapInstance) => setMap(mapInstance), []);
-  const onUnmountMap = useCallback(() => setMap(null), []);
-
-  // Sorted chronologically by scheduled time
-  const activeStops = activeDay !== null ? sortStopsByTime(activeTrip?.schedule[activeDay] || []) : [];
-  const allDayStops = activeTrip
-    ? Object.keys(activeTrip.schedule)
-        .sort((a, b) => Number(a) - Number(b))
-        .flatMap(day => sortStopsByTime(activeTrip.schedule[day] || []))
-        .filter(stop => stop.lat != null && stop.lng != null)
-    : [];
-  const savedPlacesWithCoords = activeTrip
-    ? (activeTrip.savedPlaces || []).filter(p => p.lat != null && p.lng != null)
-    : [];
-
-  const lastFitKeyRef = useRef({ map: null, key: '' });
-  const mapCenter = useMemo(
-    () => (activeTrip ? { lat: activeTrip.center[0], lng: activeTrip.center[1] } : undefined),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeTrip?.id, activeTrip?.center?.[0], activeTrip?.center?.[1]]
-  );
-
-  useEffect(() => {
-    if (!map || !activeTrip) return;
-
-    let points = [];
-    const currentStops = activeDay !== null ? (activeTrip.schedule[activeDay] || []) : allDayStops;
-
-    currentStops.forEach(stop => {
-      if (stop.isFlight) {
-        if (stop.departureLat != null && stop.departureLng != null) {
-          points.push({ lat: Number(stop.departureLat), lng: Number(stop.departureLng) });
-        }
-        if (stop.arrivalLat != null && stop.arrivalLng != null) {
-          points.push({ lat: Number(stop.arrivalLat), lng: Number(stop.arrivalLng) });
-        }
-      } else if (stop.lat != null && stop.lng != null) {
-        points.push({ lat: Number(stop.lat), lng: Number(stop.lng) });
-      }
-    });
-
-    if (activeDay !== null) {
-      const dayStay = activeTrip.staysByDay?.[activeDay];
-      if (dayStay && dayStay.lat != null && dayStay.lng != null) {
-        points.push({ lat: Number(dayStay.lat), lng: Number(dayStay.lng) });
-      }
-    } else {
-      savedPlacesWithCoords.forEach(p => points.push({ lat: Number(p.lat), lng: Number(p.lng) }));
-      if (activeTrip.staysByDay) {
-        Object.values(activeTrip.staysByDay).forEach(stay => {
-          if (stay.lat != null && stay.lng != null) {
-            points.push({ lat: Number(stay.lat), lng: Number(stay.lng) });
-          }
-        });
-      }
-    }
-
-    const fitKey = `${activeTrip.id}|${activeDay}|${points.map(pt => `${pt.lat},${pt.lng}`).join(';')}`;
-    if (lastFitKeyRef.current.map === map && lastFitKeyRef.current.key === fitKey) return;
-    lastFitKeyRef.current = { map, key: fitKey };
-
-    if (points.length > 1) {
-      const bounds = new window.google.maps.LatLngBounds();
-      points.forEach(point => bounds.extend(point));
-      map.fitBounds(bounds, { top: 50, right: 50, bottom: 50, left: 50 });
-    } else if (points.length === 1) {
-      map.panTo(points[0]);
-      map.setZoom(13);
-    } else if (activeTrip.center) {
-      map.panTo({ lat: activeTrip.center[0], lng: activeTrip.center[1] });
-      map.setZoom(activeTrip.zoom || 11);
-    }
-  }, [map, activeTrip, activeDay, allDayStops.length, savedPlacesWithCoords.length]);
-
   const handleTripPlaceSelected = useCallback((place) => {
     if (!place) return;
     setNewTripForm(prev => ({
@@ -1150,13 +680,14 @@ export default function App() {
 
     setNewPlace(prev => ({
       ...prev,
+      googleId: place.id || prev.googleId || null,
+      photoUrl: place.photoUrl || null,
       name: place.name,
       address: place.address,
       area: place.address,
       lat: place.lat,
       lng: place.lng,
       types: place.types || [],
-      googleId: place.id || place.googleId || null,
       rating: place.rating,
       priceInfo: renderPriceLevel(place.priceLevel) || '',
       openingHours: place.openingHours,
@@ -1168,6 +699,8 @@ export default function App() {
 
     setNewStop(prev => ({
       ...prev,
+      googleId: place.id || prev.googleId || null,
+      photoUrl: place.photoUrl || null,
       name: place.name,
       address: place.address,
       lat: place.lat,
@@ -1184,6 +717,8 @@ export default function App() {
 
     setEditStopForm(prev => ({
       ...prev,
+      googleId: place.id || prev.googleId || null,
+      photoUrl: place.photoUrl || null,
       name: place.name,
       address: place.address,
       lat: place.lat,
@@ -1200,6 +735,8 @@ export default function App() {
 
     setStayForm(prev => ({
       ...prev,
+      googleId: place.id || null,
+      photoUrl: place.photoUrl || null,
       name: place.name || '',
       address: place.address || '',
       lat: place.lat,
@@ -1366,7 +903,6 @@ export default function App() {
     setTrips(prev => [...prev, newTrip]);
     setActiveTripId(newTrip.id);
     setActiveDay(null);
-    setScreen('overview');
     setShowNewTripModal(false);
     setNewTripForm({ name: '', subName: '', startDate: '', endDate: '', lat: 48.8566, lng: 2.3522 });
   };
@@ -1431,7 +967,9 @@ export default function App() {
       lng: stayForm.lng !== null ? parseFloat(stayForm.lng) : activeTrip.center[1],
       note: stayForm.note || '',
       rating: stayForm.rating || null,
-      priceInfo: stayForm.priceInfo || ''
+      priceInfo: stayForm.priceInfo || '',
+      googleId: stayForm.googleId || null,
+      photoUrl: stayForm.photoUrl || null
     };
 
     setTrips(prev =>
@@ -1494,7 +1032,6 @@ export default function App() {
         };
       })
     );
-    goTo('itinerary', day);
   };
 
   const handleAddDirectStop = async (e) => {
@@ -1514,7 +1051,9 @@ export default function App() {
       rating: newStop.rating,
       priceInfo: newStop.priceInfo,
       openingHours: newStop.openingHours,
-      types: newStop.types || []
+      types: newStop.types || [],
+      googleId: newStop.googleId || null,
+      photoUrl: newStop.photoUrl || null
     };
 
     setTrips(prev =>
@@ -1573,7 +1112,9 @@ export default function App() {
               rating: editStopForm.rating,
               priceInfo: editStopForm.priceInfo,
               openingHours: editStopForm.openingHours,
-              types: editStopForm.types
+              types: editStopForm.types,
+              googleId: editStopForm.googleId || stop.googleId || null,
+              photoUrl: editStopForm.photoUrl || stop.photoUrl || null
             };
           }
           return stop;
@@ -1782,25 +1323,6 @@ export default function App() {
     );
   };
 
-  // Reorder the visual timeline without silently shifting published flight times.
-  // For scheduled non-flight stops we swap the two time fields, then persist the sorted day.
-  const handleShiftTimelineStop = (day, stopId, direction) => {
-    if (!stopId) return;
-    setTrips(prev => prev.map(trip => {
-      if (trip.id !== activeTrip.id) return trip;
-      const rows = sortStopsByTime(trip.schedule?.[day] || []);
-      const at = rows.findIndex(s => s.id === stopId);
-      const target = at + direction;
-      if (at < 0 || target < 0 || target >= rows.length) return trip;
-      if (rows[at].isFlight || rows[target].isFlight) return trip;
-      const first = rows[at], second = rows[target];
-      rows[at] = {...first, time: second.time};
-      rows[target] = {...second, time: first.time};
-      if (first.time === second.time) [rows[at],rows[target]] = [rows[target],rows[at]];
-      return {...trip, schedule: {...trip.schedule,[day]:sortStopsByTime(rows)}};
-    }));
-  };
-
   const handleRemoveStop = (day, index) => {
     setTrips(prev =>
       prev.map(trip => {
@@ -1828,7 +1350,8 @@ export default function App() {
       priceInfo: newPlace.priceInfo,
       openingHours: newPlace.openingHours,
       types: newPlace.types || [],
-      googleId: newPlace.googleId || null
+      googleId: newPlace.googleId || null,
+      photoUrl: newPlace.photoUrl || null
     };
 
     setTrips(prev =>
@@ -1837,7 +1360,7 @@ export default function App() {
       )
     );
 
-    setNewPlace({ name: '', address: '', area: '', category: 'Places to Visit', lat: null, lng: null, note: '', rating: null, priceInfo: '', openingHours: null, types: [], googleId: null });
+    setNewPlace({ name: '', address: '', area: '', category: 'Places to Visit', lat: null, lng: null, note: '', rating: null, priceInfo: '', openingHours: null, types: [] });
     setShowNewPlaceModal(false);
   };
 
@@ -1857,7 +1380,8 @@ export default function App() {
       priceInfo: recommendedItem.priceInfo || '',
       openingHours: recommendedItem.openingHours || null,
       types: recommendedItem.types || [],
-      googleId: recommendedItem.googleId || null
+      googleId: recommendedItem.googleId || null,
+      photoUrl: recommendedItem.photoUrl || null
     };
 
     setTrips(prev =>
@@ -1884,6 +1408,103 @@ export default function App() {
     );
   };
 
+  // ---- Itinerary helpers used by the redesigned pages ----
+  const updateTrip = (patch) => {
+    if (!activeTrip) return;
+    setTrips(prev => prev.map(trip => (trip.id === activeTrip.id ? { ...trip, ...patch } : trip)));
+  };
+
+  const setStopTime = (day, stopId, newTime) => {
+    setTrips(prev => prev.map(trip => {
+      if (trip.id !== activeTrip?.id) return trip;
+      const updated = (trip.schedule[day] || []).map(s => (s.id === stopId ? { ...s, time: newTime } : s));
+      return { ...trip, schedule: { ...trip.schedule, [day]: sortStopsByTime(updated) } };
+    }));
+  };
+
+  const setStopDuration = (day, stopId, duration) => {
+    setTrips(prev => prev.map(trip => {
+      if (trip.id !== activeTrip?.id) return trip;
+      const updated = (trip.schedule[day] || []).map(s => (s.id === stopId ? { ...s, duration } : s));
+      return { ...trip, schedule: { ...trip.schedule, [day]: updated } };
+    }));
+  };
+
+  // Nearest-neighbour ordering from the first stop; times are re-spaced using each stop's duration.
+  const optimizeDay = (day) => {
+    if (!activeTrip) return;
+    const stops = sortStopsByTime(activeTrip.schedule?.[day] || []);
+    const movable = stops.filter(s => !s.isFlight && s.lat != null && s.lng != null);
+    if (movable.length < 3) { alert('Add at least three located stops to optimise the route.'); return; }
+    if (!confirm(`Reorder Day ${day} stops by shortest path and re-space their times?`)) return;
+    const flights = stops.filter(s => s.isFlight);
+    const remaining = [...movable];
+    const ordered = [remaining.shift()];
+    while (remaining.length) {
+      const last = ordered[ordered.length - 1];
+      let bestIdx = 0, best = Infinity;
+      remaining.forEach((s, i) => { const d = haversineKm(last, s); if (d < best) { best = d; bestIdx = i; } });
+      ordered.push(remaining.splice(bestIdx, 1)[0]);
+    }
+    let t = ordered[0].time || '09:00';
+    const retimed = ordered.map((s, i) => {
+      if (i > 0) {
+        const prev = ordered[i - 1];
+        const travelMin = Math.min(90, Math.max(10, Math.round(haversineKm(prev, s) * 12)));
+        t = addMinutes(t, (prev.duration || 60) + travelMin);
+      }
+      return { ...s, time: t };
+    });
+    updateTrip({ schedule: { ...activeTrip.schedule, [day]: sortStopsByTime([...flights, ...retimed]) } });
+  };
+
+  // Fill a day with saved places that are not yet scheduled anywhere in the trip.
+  const autoPlanDay = (day) => {
+    if (!activeTrip) return;
+    const scheduledNames = new Set(Object.values(activeTrip.schedule || {}).flat().map(s => (s.name || '').toLowerCase()));
+    const stay = activeTrip.staysByDay?.[day];
+    const pool = (activeTrip.savedPlaces || []).filter(p => !scheduledNames.has((p.name || '').toLowerCase()) && p.category !== 'Stays/Hotel' && p.lat != null);
+    if (!pool.length) { alert('No unscheduled saved places left. Save a few places first.'); return; }
+    const anchor = stay || activeTrip.schedule?.[day]?.find(s => !s.isFlight) || pool[0];
+    const picked = [...pool].sort((a, b) => haversineKm(anchor, a) - haversineKm(anchor, b)).slice(0, 4);
+    if (!confirm(`Add ${picked.length} saved place${picked.length === 1 ? '' : 's'} to Day ${day}?`)) return;
+    const existing = sortStopsByTime(activeTrip.schedule?.[day] || []);
+    let t = existing.length ? addMinutes(existing[existing.length - 1].time || '09:00', (existing[existing.length - 1].duration || 60) + 30) : '09:30';
+    const created = picked.map((p, i) => {
+      if (i > 0) t = addMinutes(t, 60 + 30);
+      return { ...p, address: p.address || p.area || '', id: `s_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`, time: t, duration: 60 };
+    });
+    updateTrip({ schedule: { ...activeTrip.schedule, [day]: sortStopsByTime([...existing, ...created]) } });
+    setActiveDay(day);
+  };
+
+  const openStayModal = (day, currentStay) => {
+    setStayForm({
+      name: currentStay?.name || '',
+      address: currentStay?.address || '',
+      lat: currentStay?.lat ?? null,
+      lng: currentStay?.lng ?? null,
+      note: currentStay?.note || '',
+      rating: currentStay?.rating || null,
+      priceInfo: currentStay?.priceInfo || '',
+      googleId: currentStay?.googleId || null,
+      photoUrl: currentStay?.photoUrl || null,
+      fromDay: day,
+      toDay: day
+    });
+    setShowStayModal(true);
+  };
+
+  const openNewTrip = (prefill = {}) => {
+    setNewTripForm(prev => ({ ...prev, ...prefill }));
+    setShowNewTripModal(true);
+  };
+
+  const openAddStop = () => {
+    if (activeDay === null) setActiveDay(1);
+    setShowAddStopModal(true);
+  };
+
   const filteredPlaces = activeTrip
     ? activeTrip.savedPlaces.filter(place => {
         const matchesCategory = filterCategory === 'ALL' || place.category === filterCategory;
@@ -1897,7 +1518,7 @@ export default function App() {
 
   if (authChecking) {
     return (
-      <div className="min-h-screen bg-[#f6f5f0] flex items-center justify-center text-xs text-[#899489]">
+      <div className="min-h-screen bg-cream flex items-center justify-center text-xs text-ink-3">
         Connecting to MongoDB Atlas...
       </div>
     );
@@ -1906,62 +1527,46 @@ export default function App() {
   // Mandated Login Page when not authenticated
   if (!currentUser) {
     return (
-      <div className="zen-auth min-h-screen bg-[#f6f5f0] text-[#273c32] flex flex-col justify-center items-center px-4 py-8 sm:py-12 font-sans relative">
-        <div className="zen-auth-card w-full max-w-md bg-white border border-[#e5e1d7] rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
-          <div className="zen-auth-heading text-center space-y-2">
-            <div className="zen-auth-mark" aria-hidden="true">t<span>.</span></div>
-            <div className="zen-eyebrow">THE ART OF GOING SOMEWHERE</div>
-            <h1 className="font-serif text-2xl sm:text-3xl font-medium tracking-tight">The journey is yours.</h1>
-            <p className="text-xs text-[#899489] tracking-wide">Welcome back to Travelogue</p>
+      <div className="min-h-screen bg-cream text-ink flex flex-col justify-center items-center px-4 py-8 sm:py-12 font-sans relative overflow-hidden">
+        <div className="absolute inset-x-0 top-0 h-[260px] opacity-90"><HeroArt /></div>
+        <div className="relative w-full max-w-md tl-card p-6 sm:p-8 space-y-6 mt-16">
+          <div className="text-center space-y-1">
+            <BrandMark className="w-14 h-12 mx-auto" />
+            <h1 className="font-serif text-3xl tracking-tight">Travelogue</h1>
+            <p className="text-xs text-ink-3 tracking-wide">Plan, explore, and remember · by Li Ze Ying</p>
           </div>
 
-          <div className="p-3 bg-emerald-50/80 border border-emerald-200/80 rounded-lg text-xs text-emerald-900 flex items-center space-x-2">
-            <Database className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>A quieter space for everything your travels hold.</span>
+          <div className="p-3 bg-sage-mist border border-sage/20 rounded-xl text-xs text-ink-2 flex items-center space-x-2">
+            <Database className="w-4 h-4 text-sage-deep shrink-0" />
+            <span>Sign in to manage and sync your travel itineraries.</span>
           </div>
 
-          <div className="flex border-b border-[#e5e1d7] text-xs">
+          <div className="flex p-1 rounded-full bg-cream-2 text-xs">
             <button
               type="button"
-              onClick={() => {
-                setAuthMode('login');
-                setAuthError('');
-                setAuthSuccess('');
-              }}
-              className={`flex-1 py-2.5 font-medium border-b-2 transition-all cursor-pointer ${
-                authMode === 'login'
-                  ? 'border-[#273c32] text-[#273c32]'
-                  : 'border-transparent text-[#899489] hover:text-[#273c32]'
-              }`}
+              onClick={() => { setAuthMode('login'); setAuthError(''); setAuthSuccess(''); }}
+              className={`flex-1 py-2 rounded-full font-medium transition-all cursor-pointer ${authMode === 'login' ? 'bg-paper shadow-sm text-ink' : 'text-ink-3 hover:text-ink'}`}
             >
               Sign In
             </button>
             <button
               type="button"
-              onClick={() => {
-                setAuthMode('register');
-                setAuthError('');
-                setAuthSuccess('');
-              }}
-              className={`flex-1 py-2.5 font-medium border-b-2 transition-all cursor-pointer ${
-                authMode === 'register'
-                  ? 'border-[#273c32] text-[#273c32]'
-                  : 'border-transparent text-[#899489] hover:text-[#273c32]'
-              }`}
+              onClick={() => { setAuthMode('register'); setAuthError(''); setAuthSuccess(''); }}
+              className={`flex-1 py-2 rounded-full font-medium transition-all cursor-pointer ${authMode === 'register' ? 'bg-paper shadow-sm text-ink' : 'text-ink-3 hover:text-ink'}`}
             >
               Create Account
             </button>
           </div>
 
           {authError && (
-            <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-center space-x-2">
+            <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center space-x-2">
               <AlertTriangle className="w-4 h-4 shrink-0" />
               <span>{authError}</span>
             </div>
           )}
 
           {authSuccess && (
-            <div className="p-3 bg-green-50 border border-green-200 text-green-800 text-xs rounded-lg flex items-center space-x-2">
+            <div className="p-3 bg-green-50 border border-green-200 text-green-800 text-xs rounded-xl flex items-center space-x-2">
               <CheckCircle2 className="w-4 h-4 shrink-0 text-green-600" />
               <span>{authSuccess}</span>
             </div>
@@ -1972,15 +1577,9 @@ export default function App() {
               <div>
                 <label className={LABEL}>Full Name</label>
                 <div className="relative">
-                  <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#899489] pointer-events-none" />
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Alex Tan"
-                    value={authForm.name}
-                    onChange={(e) => setAuthForm(prev => ({ ...prev, name: e.target.value }))}
-                    className={FIELD_ICON}
-                  />
+                  <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-3 pointer-events-none" />
+                  <input type="text" required placeholder="e.g. Alex Tan" value={authForm.name}
+                    onChange={(e) => setAuthForm(prev => ({ ...prev, name: e.target.value }))} className={FIELD_ICON} />
                 </div>
               </div>
             )}
@@ -1988,40 +1587,28 @@ export default function App() {
             <div>
               <label className={LABEL}>Email Address</label>
               <div className="relative">
-                <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#899489] pointer-events-none" />
-                <input
-                  type="email"
-                  required
-                  placeholder="e.g. user@example.com"
-                  value={authForm.email}
-                  onChange={(e) => setAuthForm(prev => ({ ...prev, email: e.target.value }))}
-                  className={FIELD_ICON}
-                />
+                <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-3 pointer-events-none" />
+                <input type="email" required placeholder="e.g. user@example.com" value={authForm.email}
+                  onChange={(e) => setAuthForm(prev => ({ ...prev, email: e.target.value }))} className={FIELD_ICON} />
               </div>
             </div>
 
             <div>
               <label className={LABEL}>Password</label>
               <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#899489] pointer-events-none" />
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={authForm.password}
-                  onChange={(e) => setAuthForm(prev => ({ ...prev, password: e.target.value }))}
-                  className={FIELD_ICON}
-                />
+                <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-3 pointer-events-none" />
+                <input type="password" required placeholder="••••••••" value={authForm.password}
+                  onChange={(e) => setAuthForm(prev => ({ ...prev, password: e.target.value }))} className={FIELD_ICON} />
               </div>
             </div>
 
             <button
               type="submit"
               disabled={authSubmitting}
-              className="w-full bg-[#273c32] text-white py-3 rounded-lg text-xs font-medium hover:bg-[#375448] transition-all flex items-center justify-center space-x-1.5 shadow-sm mt-2 cursor-pointer disabled:opacity-60"
+              className="w-full bg-sage-deep text-white py-3 rounded-full text-xs font-medium hover:bg-[#46553a] transition-all flex items-center justify-center space-x-1.5 shadow-sm mt-2 cursor-pointer disabled:opacity-60"
             >
               <User className="w-3.5 h-3.5" />
-              <span>{authSubmitting ? 'Please wait...' : authMode === 'login' ? 'Continue to my journeys' : 'Register Account'}</span>
+              <span>{authSubmitting ? 'Please wait...' : authMode === 'login' ? 'Sign In & Access Travelogue' : 'Register Account'}</span>
             </button>
           </form>
         </div>
@@ -2031,22 +1618,22 @@ export default function App() {
 
   if (dbError && !tripsLoaded) {
     return (
-      <div className="min-h-screen bg-[#f6f5f0] text-[#273c32] flex flex-col justify-center items-center px-4 font-sans">
-        <div className="w-full max-w-md bg-white border border-red-200 rounded-2xl p-6 space-y-4 shadow-sm text-center">
+      <div className="min-h-screen bg-cream text-ink flex flex-col justify-center items-center px-4 font-sans">
+        <div className="w-full max-w-md bg-paper border border-red-200 rounded-2xl p-6 space-y-4 shadow-sm text-center">
           <AlertTriangle className="w-8 h-8 mx-auto text-red-500" />
           <h2 className="font-serif text-xl">Unable to connect to MongoDB Atlas</h2>
-          <p className="text-xs text-[#67766b] break-words">{dbError}</p>
+          <p className="text-xs text-ink-2 break-words">{dbError}</p>
           <div className="flex items-center justify-center space-x-2 text-xs">
             <button
               onClick={() => setReloadKey(k => k + 1)}
               disabled={isDbSyncing}
-              className="px-4 py-2 bg-[#273c32] text-white rounded hover:bg-[#375448] cursor-pointer"
+              className="px-4 py-2 bg-sage-deep text-white rounded hover:bg-[#46553a] cursor-pointer"
             >
               {isDbSyncing ? 'Retrying...' : 'Retry'}
             </button>
             <button
               onClick={handleLogout}
-              className="px-4 py-2 border border-[#e5e1d7] rounded hover:border-[#273c32] cursor-pointer"
+              className="px-4 py-2 border border-line rounded hover:border-sage cursor-pointer"
             >
               Sign Out
             </button>
@@ -2056,101 +1643,30 @@ export default function App() {
     );
   }
 
+  const pageCtx = {
+    user: currentUser, trips, activeTrip, activeTripId, setActiveTripId, activeDay, setActiveDay, sharedMeta,
+    isLoaded, loadError, navigate, isDbSyncing, dbError,
+    filterCategory, setFilterCategory, searchQuery, setSearchQuery, filteredPlaces,
+    recommendations, isRecLoading, recCategory, setRecCategory, fetchRecommendations,
+    handleAddToDay, handleDeleteSavedPlace, handleAddRecommendedToSaved,
+    openNewPlace: () => setShowNewPlaceModal(true), openNewTrip, openAddStop, openStayModal,
+    handleOpenShare, handleOpenEditDatesModal, handleDeleteTrip, handleAddDay,
+    handleMoveStop, handleRemoveStop, handleOpenEditStopModal, handleOpenAddFlight, handleUnpinStay,
+    handleOpenInGoogleMaps, handleOpenInYahooCarNavi, refreshSavedFlight, refreshingFlightIds, flightRefreshErrors,
+    setStopTime, setStopDuration, updateTrip, optimizeDay, autoPlanDay, handleLogout
+  };
+  const pages = { overview: OverviewPage, saved: SavedPlacesPage, itinerary: ItineraryPage, flights: FlightsPage, profile: ProfilePage };
+  const Page = pages[page] || OverviewPage;
+  const notificationCount = (collabConflict ? 1 : 0) + (dbError ? 1 : 0) + Object.values(flightRefreshErrors).filter(Boolean).length;
+
   return (
-    <div className="zen-app min-h-screen bg-[#f6f5f0] text-[#273c32] flex flex-col font-sans">
+    <div className="min-h-screen bg-cream text-ink flex flex-col font-sans">
       <style>{PLACE_AUTOCOMPLETE_CSS}</style>
-      {/* Header */}
-      <header className="zen-header border-b border-[#e5e1d7] bg-[#f6f5f0] sticky top-0 z-40">
-        {/* Mobile: row 1 = brand + account, row 2 = trip switcher (full width).
-            Desktop (sm+): single row = brand | trip switcher ........ account */}
-        <div className="zen-header-inner max-w-7xl mx-auto px-4 sm:px-6 py-2 sm:py-0 sm:h-16 flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-2 sm:gap-x-6">
-          {/* Brand */}
-          <div className="flex items-center space-x-2 shrink-0 min-w-0 order-1">
-            <span className="zen-brand-mark" aria-hidden="true">t<span>.</span></span>
-            <div className="flex flex-col zen-brand-copy">
-              <span className="font-serif text-lg sm:text-xl font-medium tracking-tight">Travelogue</span>
-              <span className="zen-brand-subtitle">a place for your journeys</span>
-            </div>
-          </div>
-
-          {/* Five independent destinations: each surface has its own task and layout. */}
-          <nav className="zen-global-nav" aria-label="Primary navigation">
-            {[
-              ['overview', House, 'Overview'], ['places', Bookmark, 'Saved Places'],
-              ['itinerary', CalendarDays, 'Itinerary'], ['flights', Plane, 'Flights'],
-              ['profile', User, 'Profile']
-            ].map(([key, Icon, label]) => (
-              <button key={key} type="button" onClick={() => goTo(key, key === 'itinerary' ? 1 : undefined)}
-                aria-current={screen === key ? 'page' : undefined} className={`zen-nav-item ${screen === key ? 'zen-nav-active' : ''}`}>
-                <Icon size={17} strokeWidth={1.8} /> <span>{label}</span>
-              </button>
-            ))}
-          </nav>
-
-          {/* User Account & Database Status Bar */}
-          <div className="flex items-center space-x-2 sm:space-x-4 ml-auto shrink-0 min-w-0 order-2 sm:order-3">
-            <div className="zen-sync hidden md:flex items-center space-x-1.5 text-[11px] text-[#67766b] bg-[#f0eee7] px-2.5 py-1 rounded border border-[#e5e1d7]">
-              <Database className={`w-3.5 h-3.5 ${dbError ? 'text-red-500' : isDbSyncing ? 'text-amber-500 animate-spin' : 'text-emerald-600'}`} />
-              <span className="sr-only">Database status:</span>
-              <span className="font-medium text-[#273c32]">
-                {dbError ? 'Error' : isDbSyncing ? 'Syncing...' : 'All changes saved'}
-              </span>
-            </div>
-
-            <div className="flex items-center space-x-1 sm:space-x-3 min-w-0">
-              <button type="button" onClick={() => goTo('profile')} title="Open your profile" className="zen-account-button flex items-center space-x-1.5 sm:space-x-2 bg-white border border-[#e5e1d7] rounded px-2 sm:px-2.5 py-1 min-w-0">
-                <div className="w-5 h-5 rounded-full bg-[#273c32] text-white flex items-center justify-center text-[10px] font-bold shrink-0 overflow-hidden">
-                  {profile.avatarUrl ? <img src={profile.avatarUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" onError={e=>e.currentTarget.style.display='none'}/> : currentUser.name ? currentUser.name[0].toUpperCase() : 'U'}
-                </div>
-                <span className="text-xs font-medium text-[#273c32] max-w-[72px] sm:max-w-[120px] truncate">{currentUser.name}</span>
-              </button>
-              <button
-                onClick={handleLogout}
-                className="p-2 sm:p-1.5 text-[#67766b] hover:text-red-600 hover:bg-red-50 rounded transition-all cursor-pointer shrink-0"
-                title="Sign Out"
-                aria-label="Sign Out"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* Trip switcher: full width on mobile, inline (with divider) on desktop */}
-          <div className="zen-trip-switcher order-3 sm:order-2 w-full sm:w-auto flex items-center gap-2 sm:gap-3 sm:border-l sm:border-[#e5e1d7] sm:pl-6">
-            {trips.length > 0 ? (
-              <select
-                value={activeTripId || ''}
-                onChange={(e) => {
-                  setActiveTripId(e.target.value);
-                  setActiveDay(null);
-                  setShowShareModal(false);
-                }}
-                aria-label="Select journey"
-                className="zen-trip-select flex-1 min-w-0 sm:flex-none sm:max-w-[200px] bg-transparent font-medium text-sm border-none outline-none cursor-pointer text-[#273c32] truncate"
-              >
-                {trips.map(trip => (
-                  <option key={trip.id} value={trip.id}>
-                    {trip.name} ({trip.japaneseSub}){trip.sharedId ? ' · Shared' : ''}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <span className="flex-1 sm:flex-none text-xs text-[#899489] italic">No active itineraries</span>
-            )}
-
-            <button
-              onClick={() => setShowNewTripModal(true)}
-              className="zen-new-trip flex items-center space-x-1 text-xs px-2.5 py-1 border border-[#e5e1d7] rounded hover:border-[#273c32] transition-all shrink-0 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>New Trip</span>
-            </button>
-          </div>
-        </div>
-      </header>
+      <TopNav page={page} onNavigate={navigate} user={currentUser} notifications={notificationCount}
+        onBell={() => navigate('flights')} onAvatar={() => navigate('profile')} />
 
       {dbError && (
-        <div className="bg-red-50 border-b border-red-200 text-red-700 text-xs px-4 py-2 flex items-center justify-center space-x-2">
+        <div className="bg-red-50 border-b border-red-200 text-red-700 text-xs px-4 py-2 flex items-center justify-center gap-2">
           <AlertTriangle className="w-4 h-4 shrink-0" />
           <span className="break-words">{dbError}</span>
           <button onClick={() => setSyncPulse(v => v + 1)} className="underline font-medium cursor-pointer shrink-0">Retry saving</button>
@@ -2161,1198 +1677,30 @@ export default function App() {
         <div className="bg-amber-50 border-b border-amber-200 text-amber-900 text-xs px-4 py-3 flex flex-wrap items-center justify-center gap-2">
           <AlertTriangle className="w-4 h-4" />
           <span>Someone edited the same field. Your changes are still on this device. Choose which version to keep.</span>
-          <button onClick={() => handleResolveConflict(true)} className="px-3 py-1.5 bg-[#273c32] text-white rounded cursor-pointer">Keep my changes</button>
-          <button onClick={() => handleResolveConflict(false)} className="px-3 py-1.5 border border-amber-400 rounded cursor-pointer">Load their version</button>
+          <button onClick={() => handleResolveConflict(true)} className="px-3 py-1.5 bg-sage-deep text-white rounded-full cursor-pointer">Keep my changes</button>
+          <button onClick={() => handleResolveConflict(false)} className="px-3 py-1.5 border border-amber-400 rounded-full cursor-pointer">Load their version</button>
         </div>
       )}
 
-      {/* Main destinations */}
-      {screen === 'profile' ? (
-        <ProfileStudio
-          user={currentUser} profile={profile} trips={trips} allSavedCount={allSavedCount}
-          totalFlightCount={totalFlightCount} notice={profileNotice}
-          onEdit={openProfileEditor} onNewTrip={()=>setShowNewTripModal(true)}
-          onChooseTrip={trip=>{setActiveTripId(trip.id);goTo('overview')}}
-          onLogout={handleLogout}
-        />
-      ) : !activeTrip ? (
-        <div className="zen-empty max-w-md mx-auto my-auto py-16 sm:py-24 px-4 text-center space-y-4">
-          <Globe className="w-12 h-12 mx-auto text-[#ccc9be]" />
-          <h2 className="font-serif text-2xl">Your next chapter starts here</h2>
-          <p className="text-xs text-[#7b887b]">
-            Make room for the places you have yet to discover. Begin with a journey, then fill in the details as you go.
-          </p>
-          <div className="flex items-center justify-center space-x-3 pt-2">
-            <button
-              onClick={() => setShowNewTripModal(true)}
-              className="px-4 py-2 bg-[#273c32] text-white rounded text-xs font-medium hover:bg-[#375448] transition-all cursor-pointer"
-            >
-              + Create New Trip
-            </button>
-          </div>
-        </div>
-      ) : screen === 'overview' ? (
-        <OverviewStudio
-          trip={activeTrip} trips={trips} flights={flightsByDay}
-          stops={Object.values(activeTrip.schedule||{}).flat().filter(item=>!item.isFlight)}
-          stays={tripStays} loaded={isLoaded} loadError={loadError}
-          onGo={goTo} onAddTrip={()=>setShowNewTripModal(true)}
-          onAddPlace={()=>{goTo('places');setShowNewPlaceModal(true)}}
-          onShare={handleOpenShare}
-          onSearchPlace={name=>{setFilterCategory('ALL');setSearchQuery(name||'');goTo('places')}}
-        />
-      ) : screen === 'flights' ? (
-        <main className="zen-page zen-flights-page" aria-label="Flight planner">
-          <section className="zen-page-heading"><div><p className="zen-kicker">ABOVE THE CLOUDS</p><h1>Your flights</h1><p>Every departure, arrival and connection in one quiet space.</p></div><button className="zen-button zen-button-dark" onClick={handleOpenAddFlight}><Plus size={16}/> Add a flight</button></section>
-          <div className="zen-flights-layout"><section className="zen-flight-list"><div className="zen-panel-top"><div><p className="zen-kicker">{activeTrip.name.toUpperCase()}</p><h2>Flight schedule</h2></div><span className="zen-count">{flightsByDay.length} flight{flightsByDay.length===1?'':'s'}</span></div>
-            {flightsByDay.length ? flightsByDay.map(({day,flight})=>(<div className="zen-flight-card" key={flight.id}>
-              <div className="zen-flight-card-top"><span><Plane size={16}/> {flight.flightNumber || flight.name || 'Scheduled flight'}</span><span>{flight.status || 'Scheduled'}</span></div>
-              <div className="zen-flight-airports"><div><small>DEPARTURE</small><strong>{flight.originCode || flight.departureAirport || '—'}</strong><span>{flight.departureTime || flight.time || 'TBC'} · T{flight.departureTerminal || '—'} · Gate {flight.departureGate || 'TBC'}</span></div><span className="zen-flight-path"><Plane size={19}/></span><div><small>ARRIVAL</small><strong>{flight.destinationCode || flight.arrivalAirport || '—'}</strong><span>{flight.arrivalTime || 'TBC'} · T{flight.arrivalTerminal || '—'} · Gate {flight.arrivalGate || 'TBC'}</span></div></div>
-              <div className="zen-flight-foot"><span><CalendarDays size={14}/> {flight.flightDate || formatDayDate(activeTrip.startDate,day,true)} · Day {day}</span><div><button type="button" onClick={()=>refreshSavedFlight(activeTrip.id,day,flight,true)} disabled={refreshingFlightIds.includes(flight.id)}><RefreshCw size={14} className={refreshingFlightIds.includes(flight.id)?'animate-spin':''}/> Refresh status</button><button type="button" onClick={()=>goTo('itinerary',day)}><Calendar size={14}/> View in itinerary</button></div></div>
-              {flightRefreshErrors[flight.id] && <p className="zen-flight-error">{flightRefreshErrors[flight.id]}</p>}
-            </div>)) : <div className="zen-flight-blank"><Plane size={42}/><h3>Good journeys take flight.</h3><p>Add a flight number and departure date to find its published schedule through AeroAPI.</p><button className="zen-button zen-button-dark" onClick={handleOpenAddFlight}><Plus size={16}/> Find a flight</button></div>}
-          </section><aside className="zen-flight-aside"><div className="zen-landscape" aria-hidden="true"><span className="zen-sun"/><span className="zen-mountain zen-mountain-one"/><span className="zen-mountain zen-mountain-two"/><span className="zen-mountain zen-mountain-three"/></div><p className="zen-kicker">BEFORE YOU GO</p><h2>Keep the little details together.</h2><p>FlightAware AeroAPI supplies published schedules. When operational data becomes available, Travelogue can update terminals, gates and status. Availability depends on the airline and airport.</p><button className="zen-link-button" onClick={()=>goTo('itinerary',1)}>Explore your days <ArrowRight size={16}/></button></aside></div>
-        </main>
-      ) : (
-        <div className="ma-workspace-root">
-          {screen === 'places' ? <SavedPlacesStudio
-            trip={activeTrip} loaded={isLoaded} loadError={loadError}
-            filteredPlaces={filteredPlaces} filterCategory={filterCategory} onFilter={setFilterCategory}
-            searchQuery={searchQuery} onSearch={setSearchQuery} placeDisplay={placeDisplay} onDisplay={setPlaceDisplay}
-            onAddPlace={()=>setShowNewPlaceModal(true)} onPlanPlace={handleAddToDay}
-            onRemovePlace={handleDeleteSavedPlace} onGo={goTo}
-            onCreateCollection={name=>setTrips(prev=>prev.map(t=>t.id===activeTrip.id?{...t,collections:[...(t.collections||[]),{id:`c_${Date.now()}_${Math.random().toString(36).slice(2,5)}`,name}]}:t))}
-            onAssignCollection={(placeId,collectionId)=>setTrips(prev=>prev.map(t=>t.id===activeTrip.id?{...t,savedPlaces:t.savedPlaces.map(place=>place.id===placeId?{...place,collectionIds:collectionId?[collectionId]:[]}:place)}:t))}
-            recommendations={recommendations} onSaveRecommendation={handleAddRecommendedToSaved}
-            isRecLoading={isRecLoading} onRefreshRecommendations={fetchRecommendations}
-            onOpenTools={()=>{setShowPlanningTools(true);setShowDiscovery(true);}}
-          /> : <ItineraryStudio
-            trip={activeTrip} selectedDay={activeDay} onDayChange={setActiveDay}
-            onAddDay={handleAddDay} onAddStop={()=>{setActiveDay(d=>d||1);setShowAddStopModal(true)}}
-            onAddFlight={handleOpenAddFlight}
-            onOpenStay={()=>{const day=activeDay||1;const stay=activeTrip.staysByDay?.[day];setStayForm({name:stay?.name||'',address:stay?.address||'',lat:stay?.lat??null,lng:stay?.lng??null,note:stay?.note||'',rating:stay?.rating||null,priceInfo:stay?.priceInfo||'',fromDay:day,toDay:day});setShowStayModal(true)}}
-            onRemoveStop={handleRemoveStop} onMoveStop={handleShiftTimelineStop} onEditStop={handleOpenEditStopModal}
-            onOpenMaps={handleOpenInGoogleMaps} onOpenDates={handleOpenEditDatesModal}
-            onSaveNotes={text=>setTrips(prev=>prev.map(t=>t.id===activeTrip.id?{...t,notes:text}:t))}
-            onAddExpense={(label,amount)=>setTrips(prev=>prev.map(t=>t.id===activeTrip.id?{...t,expenses:[...(t.expenses||[]),{id:`ex_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,label,amount}]}:t))}
-            onRemoveExpense={expenseId=>setTrips(prev=>prev.map(t=>t.id===activeTrip.id?{...t,expenses:(t.expenses||[]).filter(e=>e.id!==expenseId)}:t))}
-            onBudgetCurrency={code=>setTrips(prev=>prev.map(t=>t.id===activeTrip.id?{...t,budgetCurrency:code}:t))}
-            onGo={goTo} loaded={isLoaded} loadError={loadError}
-            onOpenTools={()=>setShowPlanningTools(v=>!v)}
-          />}
-          <button type="button" className="ma-advanced-button" onClick={()=>setShowPlanningTools(value=>!value)} aria-expanded={showPlanningTools}>
-            <Settings size={15}/> {showPlanningTools?'Hide advanced editing tools':'Open all editing & discovery tools'} <ChevronDown size={15}/>
-          </button>
-          {showPlanningTools && <div className="ma-advanced-wrap">
-          <div className={`zen-workspace zen-${screen}-workspace max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex-1 w-full`}>
-          <section className="zen-hero zen-detail-hero" aria-label="Current journey">
-            <div className="zen-detail-hero-art" aria-hidden="true" />
-            <div className="zen-hero-main">
-              <p className="zen-eyebrow"><span className="zen-eyebrow-line" /> YOUR TRAVEL JOURNAL <span className="zen-hero-number">/ {String(trips.findIndex(t => t.id === activeTrip.id) + 1).padStart(2, '0')}</span></p>
-              <h1>{activeTrip.name}</h1>
-              <p className="zen-hero-subtitle">{activeTrip.japaneseSub || 'A journey worth remembering'}</p>
-              <div className="zen-hero-stats">
-                <span><Calendar className="w-3.5 h-3.5" /> {activeTrip.startDate || 'Dates not set'}</span>
-                <span><Layers className="w-3.5 h-3.5" /> {activeTrip.daysCount} {activeTrip.daysCount === 1 ? 'day' : 'days'}</span>
-                <span><Pin className="w-3.5 h-3.5" /> {activeTrip.savedPlaces?.length || 0} saved</span>
-                <span><Footprints className="w-3.5 h-3.5" /> {allDayStops.length} planned</span>
-                {activeTrip.sharedId && <span><Users className="w-3.5 h-3.5" /> {Math.max(0, (sharedMeta[activeTrip.sharedId]?.members?.length || 1) - 1)} editors</span>}
-              </div>
-            </div>
-            <div className="zen-hero-actions">
-              <span className="zen-hero-actions-label">YOUR JOURNEY, YOUR PACE</span>
-              <div className="flex items-center space-x-2 shrink-0 flex-wrap gap-y-2">
-                <button
-                  onClick={handleOpenShare}
-                  className="zen-action-primary px-2.5 py-2 border border-[#e5e1d7] rounded hover:border-[#273c32] transition-all cursor-pointer flex items-center gap-1.5 text-xs"
-                  title="Share trip and collaborate"
-                >
-                  <Users className="w-4 h-4" />
-                  <span>{activeTrip.sharedId ? 'Collaborators' : 'Share journey'}</span>
-                </button>
-                <button
-                  onClick={handleOpenEditDatesModal}
-                  className="zen-icon-action p-2 border border-[#e5e1d7] rounded hover:border-[#273c32] transition-all cursor-pointer"
-                  title="Edit Trip Dates"
-                >
-                  <Calendar className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setShowNewPlaceModal(true)}
-                  className="zen-icon-action p-2 border border-[#e5e1d7] rounded hover:border-[#273c32] transition-all cursor-pointer"
-                  title="Add Custom Place"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleDeleteTrip}
-                  className="zen-icon-action zen-delete-action p-2 border border-[#e5e1d7] text-red-500 hover:border-red-500 rounded transition-all cursor-pointer"
-                  title="Delete Trip"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </section>
-          <div className={`zen-detail-content ${screen === 'itinerary' ? 'zen-detail-itinerary' : 'zen-detail-places'}`}>
-          {/* Your saved library, independent from the itinerary */}
-          {screen === 'places' && <section className="zen-collection-panel min-w-0 flex flex-col" aria-label="Saved places and discovery">
-            <div className="zen-section-intro">
-              <span className="zen-eyebrow">01 / COLLECT</span>
-              <div className="zen-section-intro-row"><h2>Your travel library</h2><span className="zen-section-caption">Saved places and discoveries</span></div>
-            </div>
+      <div className="flex-1 w-full">
+        <Page {...pageCtx} />
+      </div>
 
-            <div className="zen-library-heading"><div><p className="zen-kicker">TRAVEL LIBRARY</p><h3>{activeTrip.name} <span>· {activeTrip.savedPlaces?.length || 0} saved</span></h3></div><button className="zen-button zen-button-dark" onClick={()=>setShowNewPlaceModal(true)}><Plus size={15}/> Add place</button></div>
-            <div className="zen-library-toolbar"><div className="zen-toggle" role="group" aria-label="Saved places display"><button type="button" onClick={()=>setPlaceDisplay('map')} aria-pressed={placeDisplay==='map'} className={placeDisplay==='map'?'zen-toggle-active':''}><MapIcon size={15}/> Map</button><button type="button" onClick={()=>setPlaceDisplay('list')} aria-pressed={placeDisplay==='list'} className={placeDisplay==='list'?'zen-toggle-active':''}><List size={15}/> List</button></div><span>Make a collection. Find your rhythm.</span></div>
-            {placeDisplay === 'map' && <div className="zen-library-map" aria-label="Map of your saved places">{loadError ? <p>Google Maps could not load. You can still browse your places below.</p> : isLoaded ? <GoogleMap mapContainerStyle={MAP_CONTAINER_STYLE} center={mapCenter} zoom={activeTrip.zoom || 11} options={DEFAULT_MAP_OPTIONS} onLoad={onLoadMap} onUnmount={onUnmountMap}>
-              {filteredPlaces.filter(place => place.lat != null && place.lng != null).map((place, index)=><MarkerF key={place.id || index} position={{lat:Number(place.lat),lng:Number(place.lng)}} icon={getSavedPin(place.category)} title={place.name} />)}
-              {Object.values(activeTrip.staysByDay||{}).filter((stay,index,arr)=>stay.lat!=null && stay.lng!=null && arr.findIndex(s=>s.name===stay.name && s.address===stay.address)===index).map((stay,index)=><MarkerF key={`stay_${index}`} position={{lat:Number(stay.lat),lng:Number(stay.lng)}} icon={STAY_HOTEL_PIN} title={`Stay: ${stay.name}`}/>)}
-            </GoogleMap> : <p>Loading Google Maps…</p>}</div>}
-            {/* Filters */}
-            <div className="zen-collection-filters space-y-3">
-              <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#899489] pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Search your saved places"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className={FIELD_ICON}
-                />
-              </div>
-
-              <div className="zen-filter-row flex space-x-2 overflow-x-auto pb-1 text-xs">
-                {['ALL', 'Places to Visit', 'Food & Eats', 'Experiences', 'Stays/Hotel', 'Flights'].map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setFilterCategory(cat)}
-                    className={`px-3 py-1 rounded whitespace-nowrap transition-all cursor-pointer ${
-                      filterCategory === cat
-                        ? 'bg-[#273c32] text-white'
-                        : 'border border-[#e5e1d7] text-[#67766b] hover:border-[#273c32]'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Saved Places */}
-            <div className="zen-saved-section space-y-3">
-              <h3 className="text-xs font-semibold text-[#899489] uppercase tracking-wider">
-                Saved places <span className="zen-count">{filteredPlaces.length}</span>
-              </h3>
-              <div className="zen-saved-list space-y-3 overflow-y-auto max-h-[280px] pr-1">
-                {filteredPlaces.length === 0 ? (
-                  <div className="text-center py-6 border border-dashed border-[#e5e1d7] rounded">
-                    <p className="text-xs text-[#899489]">A blank page, full of possibilities. Save a place to begin.</p>
-                  </div>
-                ) : (
-                  filteredPlaces.map((place, index) => (
-                    <div
-                      key={place.id}
-                      className="zen-saved-card p-3 bg-white border border-[#e5e1d7] rounded hover:border-[#ccc9be] transition-all flex flex-col sm:flex-row sm:items-start justify-between gap-3"
-                    >
-                      <div className="zen-saved-art" data-category={place.category} aria-hidden="true">{React.createElement(getCategoryIcon(place.category), {size: 27, strokeWidth: 1.35})}<small>{String(index+1).padStart(2,'0')}</small></div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center space-x-2 flex-wrap">
-                          <span className="text-xs font-semibold text-[#273c32] break-words">{place.name}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 bg-[#f0eee7] text-[#67766b] rounded">
-                            {place.category}
-                          </span>
-                        </div>
-                        <p className="text-xs text-[#7b887b] mt-0.5">{place.address || place.area}</p>
-                        {place.note && <p className="zen-place-note">{place.note}</p>}
-
-                        {(place.rating || place.priceInfo) && (
-                          <div className="flex items-center space-x-2 mt-1 text-[11px] text-[#56665a]">
-                            {place.rating && (
-                              <span className="flex items-center space-x-0.5 text-amber-600 font-medium">
-                                <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                                <span>{place.rating}</span>
-                              </span>
-                            )}
-                            {place.priceInfo && (
-                              <span className="text-green-700 bg-green-50 px-1.5 rounded text-[10px] border border-green-200">
-                                {place.priceInfo}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        {place.openingHours?.weekdayDescriptions?.length > 0 && (
-                          <p className="text-[10px] text-[#7b887b] mt-1">
-                            <span className="font-medium text-[#56665a]">Hours:</span>{' '}
-                            {getTodayOpeningHours(place.openingHours) || 'See full hours'}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="flex items-center space-x-1 shrink-0 self-end sm:self-start">
-
-                        <select
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              handleAddToDay(place, parseInt(e.target.value));
-                              e.target.value = '';
-                            }
-                          }}
-                          defaultValue=""
-                          className="bg-[#f6f5f0] text-xs border border-[#e5e1d7] rounded px-2 py-1 cursor-pointer max-w-[120px]"
-                        >
-                          <option value="" disabled>+ Plan a day</option>
-                          {Array.from({ length: activeTrip.daysCount }, (_, i) => i + 1).map(d => (
-                            <option key={d} value={d}>
-                              Day {d} {formatDayDate(activeTrip.startDate, d) ? `(${formatDayDate(activeTrip.startDate, d)})` : ''}
-                            </option>
-                          ))}
-                        </select>
-
-                        <button
-                          onClick={() => handleDeleteSavedPlace(place.id)}
-                          className="p-1.5 text-red-500 hover:text-red-700 cursor-pointer" title={`Remove ${place.name}`} aria-label={`Remove ${place.name}`}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* Recommendations */}
-            <div className="zen-discover-section space-y-3 pt-4 border-t border-[#e5e1d7]">
-              <div className="flex items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowDiscovery(value => !value)}
-                  aria-expanded={showDiscovery}
-                  className="zen-discover-toggle flex items-center gap-2 text-xs cursor-pointer"
-                >
-                  <Globe className="w-4 h-4 text-[#698a70]" />
-                  <span>Discover nearby</span>
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showDiscovery ? 'rotate-180' : ''}`} />
-                </button>
-
-                {showDiscovery && <button
-                  onClick={fetchRecommendations}
-                  disabled={isRecLoading}
-                  className="text-[11px] text-[#67766b] hover:text-[#273c32] flex items-center space-x-1 transition-all cursor-pointer"
-                  title="Refresh suggestions"
-                >
-                  <RefreshCw className={`w-3 h-3 ${isRecLoading ? 'animate-spin' : ''}`} />
-                  <span>Refresh</span>
-                </button>}
-              </div>
-
-              {showDiscovery && <>
-              <div className="zen-rec-filters flex space-x-2 overflow-x-auto pb-1 text-[11px]">
-                {['Places to Visit', 'Food & Eats', 'Experiences', 'Stays/Hotel'].map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setRecCategory(cat)}
-                    className={`px-2.5 py-1 rounded whitespace-nowrap transition-all cursor-pointer ${
-                      recCategory === cat
-                        ? 'bg-[#273c32] text-white'
-                        : 'border border-[#e5e1d7] text-[#67766b] hover:border-[#273c32]'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-
-              <div className="zen-discover-list space-y-3 overflow-y-auto max-h-[260px] pr-1">
-                {isRecLoading ? (
-                  <div className="py-8 text-center text-xs text-[#899489] space-y-2 border border-dashed border-[#e5e1d7] rounded">
-                    <Sparkles className="w-4 h-4 mx-auto animate-pulse text-[#273c32]" />
-                    <p>Finding top-rated places on Google Maps...</p>
-                  </div>
-                ) : recommendations.length === 0 ? (
-                  <div className="py-6 text-center text-xs text-[#899489] border border-dashed border-[#e5e1d7] rounded">
-                    No suggestions found. Check that the Places API (New) is enabled for your Maps key.
-                  </div>
-                ) : (
-                  recommendations.map((rec, idx) => {
-                    const isAlreadySaved = activeTrip.savedPlaces.some(
-                      p => p.name.toLowerCase() === rec.name.toLowerCase()
-                    );
-
-                    return (
-                      <div
-                        key={idx}
-                        className="zen-rec-card p-3 bg-[#fcfbf8] border border-[#e5e1d7] rounded flex flex-col sm:flex-row sm:items-start justify-between gap-3"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center space-x-2 flex-wrap">
-                            <span className="text-xs font-medium text-[#273c32] break-words">{rec.name}</span>
-                            <span className="text-[9px] px-1.5 py-0.5 bg-[#f0eee7] text-[#67766b] rounded">
-                              {rec.category}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center space-x-2 mt-0.5 flex-wrap">
-                            <span className="text-[11px] text-[#7b887b]">{rec.address || rec.area}</span>
-                            {rec.rating && (
-                              <span className="text-[10px] text-amber-600 font-medium flex items-center space-x-0.5">
-                                <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
-                                <span>{rec.rating}</span>
-                              </span>
-                            )}
-                            {rec.priceInfo && (
-                              <span className="text-[10px] text-green-700 bg-green-50 px-1 rounded">
-                                {rec.priceInfo}
-                              </span>
-                            )}
-                          </div>
-
-                          {rec.openingHours?.weekdayDescriptions?.length > 0 && (
-                            <p className="text-[10px] text-[#7b887b] mt-1">
-                              <span className="font-medium text-[#56665a]">Hours:</span>{' '}
-                              {getTodayOpeningHours(rec.openingHours) || 'See full hours'}
-                            </p>
-                          )}
-
-                          {rec.note && <p className="text-[11px] text-[#56665a] mt-1 italic">{rec.note}</p>}
-                        </div>
-
-                        <button
-                          onClick={() => handleAddRecommendedToSaved(rec)}
-                          disabled={isAlreadySaved}
-                          className={`flex items-center space-x-1 px-2 py-1 text-xs rounded transition-all cursor-pointer self-end sm:self-start shrink-0 ${
-                            isAlreadySaved
-                              ? 'bg-[#f0eee7] text-[#899489] cursor-default'
-                              : 'border border-[#e5e1d7] bg-white text-[#273c32] hover:border-[#273c32]'
-                          }`}
-                        >
-                          {isAlreadySaved ? (
-                            <>
-                              <Check className="w-3 h-3 text-green-600" />
-                              <span>Saved</span>
-                            </>
-                          ) : (
-                            <>
-                              <BookmarkPlus className="w-3 h-3" />
-                              <span>+ Save</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-              </>}
-            </div>
-          </section>}
-
-          {/* Schedule */}
-          {screen === 'itinerary' && <section className="zen-journey-panel min-w-0 flex flex-col" aria-label="Day by day itinerary">
-            <div className="zen-section-intro">
-              <span className="zen-eyebrow">02 / EXPLORE</span>
-              <div className="zen-section-intro-row"><h2>Your itinerary</h2><span className="zen-section-caption">Every moment, in its place</span></div>
-            </div>
-            <div className="zen-day-tabs flex items-center space-x-2 border-b border-[#e5e1d7] pb-3 overflow-x-auto min-w-0">
-              <button
-                onClick={() => setActiveDay(null)}
-                className={`px-3 py-1.5 text-xs font-medium rounded transition-all flex flex-col items-center min-w-[90px] shrink-0 cursor-pointer ${
-                  activeDay === null
-                    ? 'bg-[#273c32] text-white'
-                    : 'bg-white border border-[#e5e1d7] text-[#67766b] hover:border-[#273c32]'
-                }`}
-              >
-                <div className="flex items-center space-x-1">
-                  <Layers className="w-3 h-3" />
-                  <span>Summary</span>
-                </div>
-                <span className={`text-[10px] font-normal ${activeDay === null ? 'text-gray-300' : 'text-[#899489]'}`}>
-                  All Places Map
-                </span>
-              </button>
-
-              {Array.from({ length: activeTrip.daysCount }, (_, i) => i + 1).map(day => {
-                const dateFormatted = formatDayDate(activeTrip.startDate, day);
-                return (
-                  <button
-                    key={day}
-                    onClick={() => setActiveDay(prev => prev === day ? null : day)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded transition-all flex flex-col items-center min-w-[72px] shrink-0 cursor-pointer ${
-                      activeDay === day
-                        ? 'bg-[#273c32] text-white'
-                        : 'bg-white border border-[#e5e1d7] text-[#67766b] hover:border-[#273c32]'
-                    }`}
-                  >
-                    <span>Day {day}</span>
-                    {dateFormatted && (
-                      <span className={`text-[10px] font-normal ${activeDay === day ? 'text-gray-300' : 'text-[#899489]'}`}>
-                        {dateFormatted}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-
-              <button
-                onClick={handleAddDay}
-                className="px-3 py-2 text-xs border border-dashed border-[#e5e1d7] text-[#67766b] rounded hover:border-[#273c32] transition-all flex items-center space-x-1 shrink-0 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Day</span>
-              </button>
-            </div>
-
-            {/* Map */}
-            <div className="zen-map-frame w-full h-64 sm:h-80 border border-[#e5e1d7] rounded overflow-hidden relative bg-[#f0eee7]">
-              <div className="zen-map-legend absolute top-2 sm:top-3 right-2 sm:right-3 z-10 bg-white/95 backdrop-blur border border-[#e5e1d7] rounded p-2 sm:px-3 sm:py-2 shadow-sm text-[10px] sm:text-[11px] space-y-1">
-                <div className="flex items-center space-x-2">
-                  <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-[#273c32] inline-block border border-white shadow-sm"></span>
-                  <span className="text-[#375448]">Itinerary Stops</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-amber-500 inline-block border border-white shadow-sm"></span>
-                  <span className="text-[#375448]">Pinned Stays</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-blue-600 inline-block border border-white shadow-sm"></span>
-                  <span className="text-[#375448]">Saved Places</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="w-2.5 h-1 sm:w-3 sm:h-1 bg-blue-600 border-b border-dashed border-blue-600 inline-block"></span>
-                  <span className="text-[#375448]">Flight Routes</span>
-                </div>
-              </div>
-
-              {loadError ? (
-                <div className="w-full h-full flex flex-col items-center justify-center text-xs text-red-500 p-4">
-                  Google Maps failed to load.
-                </div>
-              ) : isLoaded ? (
-                <GoogleMap
-                  mapContainerStyle={MAP_CONTAINER_STYLE}
-                  center={mapCenter}
-                  zoom={activeTrip.zoom || 11}
-                  options={DEFAULT_MAP_OPTIONS}
-                  onLoad={onLoadMap}
-                  onUnmount={onUnmountMap}
-                >
-                  {/* Non-flight itinerary markers */}
-                  {(activeDay !== null ? activeStops : allDayStops).map((stop, idx) =>
-                    !stop.isFlight && stop.lat != null && stop.lng != null ? (
-                      <MarkerF
-                        key={stop.id || `stop_${idx}`}
-                        position={{ lat: Number(stop.lat), lng: Number(stop.lng) }}
-                        icon={DARK_ITINERARY_PIN}
-                        label={{
-                          text: `${idx + 1}`,
-                          color: '#ffffff',
-                          fontSize: '10px',
-                          fontWeight: '700'
-                        }}
-                        title={`${stop.name} (Itinerary Stop)`}
-                      />
-                    ) : null
-                  )}
-
-                  {/* Pinned Stay Markers */}
-                  {activeDay !== null && activeTrip.staysByDay?.[activeDay]?.lat != null && activeTrip.staysByDay?.[activeDay]?.lng != null && (
-                    <MarkerF
-                      key={`stay_day_${activeDay}`}
-                      position={{
-                        lat: Number(activeTrip.staysByDay[activeDay].lat),
-                        lng: Number(activeTrip.staysByDay[activeDay].lng)
-                      }}
-                      icon={STAY_HOTEL_PIN}
-                      title={`Stay: ${activeTrip.staysByDay[activeDay].name}`}
-                    />
-                  )}
-
-                  {activeDay === null && activeTrip.staysByDay &&
-                    Object.values(activeTrip.staysByDay)
-                      .filter((stay, index, self) => stay.lat != null && stay.lng != null && self.findIndex(s => s.name === stay.name && s.address === stay.address) === index)
-                      .map((stay, idx) => (
-                        <MarkerF
-                          key={`stay_summary_${idx}`}
-                          position={{ lat: Number(stay.lat), lng: Number(stay.lng) }}
-                          icon={STAY_HOTEL_PIN}
-                          title={`Stay: ${stay.name}`}
-                        />
-                      ))
-                  }
-
-                  {/* Flight paths */}
-                  {(activeDay !== null ? activeStops : allDayStops)
-                    .filter(stop => stop.isFlight)
-                    .map(flight => {
-                      const dep = {
-                        lat: flight.departureLat ?? flight.lat,
-                        lng: flight.departureLng ?? flight.lng
-                      };
-                      const arr = {
-                        lat: flight.arrivalLat,
-                        lng: flight.arrivalLng
-                      };
-
-                      if (!dep.lat || !dep.lng || !arr.lat || !arr.lng) return null;
-
-                      const pathPoints = getCurvedPath(dep, arr);
-                      if (pathPoints.length === 0) return null;
-
-                      const midPoint = pathPoints[Math.floor(pathPoints.length / 2)];
-
-                      return (
-                        <React.Fragment key={`flight_path_${flight.id}`}>
-                          <PolylineF
-                            path={pathPoints}
-                            options={{
-                              strokeColor: '#7c9c9b',
-                              strokeOpacity: 0,
-                              strokeWeight: 2,
-                              icons: [
-                                {
-                                  icon: {
-                                    path: 'M 0,-1 0,1',
-                                    strokeOpacity: 1,
-                                    strokeColor: '#7c9c9b',
-                                    scale: 3
-                                  },
-                                  offset: '0',
-                                  repeat: '15px'
-                                }
-                              ]
-                            }}
-                          />
-
-                          {midPoint && (
-                            <MarkerF
-                              position={midPoint}
-                              icon={{
-                                url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24">
-                                    <circle cx="12" cy="12" r="11" fill="#7e9987" stroke="#ffffff" stroke-width="2"/>
-                                    <path transform="translate(12 12) rotate(45)" d="M0 -8.5 Q0.6 -8.5 0.8 -7.3 L1.5 -2 L7 0.8 Q7.7 1.2 7.3 1.9 Q7.0 2.3 6.3 1.9 L1.6 0.7 L1.3 4.8 L2.5 5.8 Q2.9 6.1 2.6 6.5 Q2.4 6.8 2 6.7 L0 6.1 L-2 6.7 Q-2.4 6.8 -2.6 6.5 Q-2.9 6.1 -2.5 5.8 L-1.3 4.8 L-1.6 0.7 L-6.3 1.9 Q-7.0 2.3 -7.3 1.9 Q-7.7 1.2 -7 0.8 L-1.5 -2 L-0.8 -7.3 Q-0.6 -8.5 0 -8.5 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.2" stroke-linejoin="round"/>
-                                  </svg>
-                                `),
-                                anchor: { x: 14, y: 14 }
-                              }}
-                              title={flight.name}
-                            />
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
-
-                  {activeDay === null && savedPlacesWithCoords.map((place, idx) => (
-                    <MarkerF
-                      key={place.id || `saved_${idx}`}
-                      position={{ lat: Number(place.lat), lng: Number(place.lng) }}
-                      icon={getSavedPin(place.category)}
-                      label={{
-                        text: '✦',
-                        color: '#ffffff',
-                        fontSize: '10px',
-                        fontWeight: 'bold'
-                      }}
-                      title={`${place.name} (Saved Place)`}
-                    />
-                  ))}
-                </GoogleMap>
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-xs text-[#899489]">
-                  Loading Map...
-                </div>
-              )}
-            </div>
-
-            {/* Itinerary Box */}
-            <div className="zen-itinerary-card bg-white border border-[#e5e1d7] rounded p-4 sm:p-5 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#e5e1d7] pb-3 gap-2">
-                <div className="flex items-center space-x-2 sm:space-x-3 flex-wrap">
-                  <h2 className="font-serif text-base sm:text-lg text-[#273c32]">
-                    {activeDay !== null ? `Day ${activeDay} · The itinerary` : 'Your journey at a glance'}
-                  </h2>
-                  {activeDay !== null && formatDayDate(activeTrip.startDate, activeDay, true) && (
-                    <span className="text-xs font-medium text-[#56665a] bg-[#f0eee7] px-2 py-0.5 rounded border border-[#e5e1d7]">
-                      {formatDayDate(activeTrip.startDate, activeDay, true)}
-                    </span>
-                  )}
-                  <span className="text-xs text-[#7b887b]">
-                    • {activeDay !== null ? activeStops.length : allDayStops.length} stops
-                  </span>
-                </div>
-
-                <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                  {activeDay !== null && (
-                    <>
-                      <button
-                        onClick={() => {
-                          const currentStay = activeTrip.staysByDay?.[activeDay];
-                          setStayForm({
-                            name: currentStay?.name || '',
-                            address: currentStay?.address || '',
-                            lat: currentStay?.lat || null,
-                            lng: currentStay?.lng || null,
-                            note: currentStay?.note || '',
-                            rating: currentStay?.rating || null,
-                            priceInfo: currentStay?.priceInfo || '',
-                            fromDay: activeDay,
-                            toDay: activeDay
-                          });
-                          setShowStayModal(true);
-                        }}
-                        className="flex items-center space-x-1 text-xs px-2.5 py-1 border border-amber-300 bg-amber-50 text-amber-900 font-medium rounded hover:bg-amber-100 transition-all cursor-pointer"
-                      >
-                        <Hotel className="w-3.5 h-3.5 text-amber-600" />
-                        <span>{activeTrip.staysByDay?.[activeDay] ? 'Edit Stay' : 'Add Stay'}</span>
-                      </button>
-                      <button
-                        onClick={handleOpenAddFlight}
-                        className="flex items-center space-x-1 text-xs px-2.5 py-1 border border-sky-200 bg-sky-50/50 text-sky-800 rounded hover:border-sky-400 transition-all cursor-pointer"
-                      >
-                        <Plane className="w-3.5 h-3.5 text-sky-600" />
-                        <span>Add Flight</span>
-                      </button>
-                      <button
-                        onClick={() => setShowAddStopModal(true)}
-                        className="flex items-center space-x-1 text-xs px-2.5 py-1 border border-[#e5e1d7] rounded hover:border-[#273c32] transition-all cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Add Stop</span>
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Pinned Stay Banner at Top of Day Itinerary */}
-              {activeDay !== null && (
-                <div>
-                  {activeTrip.staysByDay?.[activeDay] ? (
-                    <div className="p-3 sm:p-3.5 bg-amber-50/70 border border-amber-200/90 rounded-lg shadow-sm flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                      <div className="flex items-start space-x-3 min-w-0 flex-1">
-                        <div className="p-2 bg-amber-500 text-white rounded-md shrink-0 mt-0.5 shadow-sm">
-                          <Hotel className="w-4 h-4" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center space-x-2 flex-wrap">
-                            <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wider flex items-center space-x-1">
-                              <Hotel className="w-3 h-3 text-amber-600" />
-                              <span>Stay for (Day {activeDay})</span>
-                            </span>
-                            {activeTrip.staysByDay[activeDay].priceInfo && (
-                              <span className="text-[10px] text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
-                                {activeTrip.staysByDay[activeDay].priceInfo}
-                              </span>
-                            )}
-                            {activeTrip.staysByDay[activeDay].rating && (
-                              <span className="text-[10px] text-amber-700 font-medium flex items-center space-x-0.5">
-                                <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
-                                <span>{activeTrip.staysByDay[activeDay].rating}</span>
-                              </span>
-                            )}
-                          </div>
-                          <h4 className="text-sm font-semibold text-[#273c32] mt-0.5">
-                            {activeTrip.staysByDay[activeDay].name}
-                          </h4>
-                          {activeTrip.staysByDay[activeDay].address && (
-                            <p className="text-xs text-[#67766b] mt-0.5 truncate">
-                              {activeTrip.staysByDay[activeDay].address}
-                            </p>
-                          )}
-                          {activeTrip.staysByDay[activeDay].note && (
-                            <p className="text-xs text-amber-900/80 italic mt-1 bg-amber-100/60 px-2 py-0.5 rounded inline-block">
-                              {activeTrip.staysByDay[activeDay].note}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center space-x-1 shrink-0 self-end sm:self-start">
-                        <button
-                          onClick={() => handleOpenInGoogleMaps(activeTrip.staysByDay[activeDay])}
-                          className="flex items-center space-x-1 text-[11px] bg-white border border-amber-300 text-amber-900 px-2 py-1 rounded hover:bg-amber-100 transition-all shadow-xs cursor-pointer"
-                          title="View on Google Maps"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          <span>Maps</span>
-                        </button>
-                        {activeTrip.staysByDay[activeDay].lat != null && activeTrip.staysByDay[activeDay].lng != null && (
-                          <button
-                            onClick={() => handleOpenInYahooCarNavi(activeTrip.staysByDay[activeDay])}
-                            className="flex items-center space-x-1 text-[11px] bg-white border border-amber-300 text-amber-900 px-2 py-1 rounded hover:bg-amber-100 transition-all shadow-xs cursor-pointer"
-                            title="Open in Yahoo!カーナビ"
-                          >
-                            <Car className="w-3 h-3" />
-                            <span>Yahoo!カーナビ</span>
-                          </button>
-                        )}
-                        <button
-                          onClick={() => {
-                            const currentStay = activeTrip.staysByDay[activeDay];
-                            setStayForm({
-                              name: currentStay.name || '',
-                              address: currentStay.address || '',
-                              lat: currentStay.lat || null,
-                              lng: currentStay.lng || null,
-                              note: currentStay.note || '',
-                              rating: currentStay.rating || null,
-                              priceInfo: currentStay.priceInfo || '',
-                              fromDay: activeDay,
-                              toDay: activeDay
-                            });
-                            setShowStayModal(true);
-                          }}
-                          className="p-1.5 text-amber-800 hover:text-amber-950 hover:bg-amber-100 rounded transition-all cursor-pointer"
-                          title="Edit / Change Stay"
-                        >
-                          <Pen className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleUnpinStay(activeDay)}
-                          className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-all cursor-pointer"
-                          title="Remove Stay for Day"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-[#fafaf7] border border-dashed border-[#e2e2da] rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                      <div className="flex items-center space-x-2 text-xs text-[#67766b]">
-                        <Hotel className="w-4 h-4 text-amber-600 shrink-0" />
-                        <span>No stay added for Day {activeDay} yet.</span>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setStayForm({
-                            name: '',
-                            address: '',
-                            lat: null,
-                            lng: null,
-                            note: '',
-                            rating: null,
-                            priceInfo: '',
-                            fromDay: activeDay,
-                            toDay: activeDay
-                          });
-                          setShowStayModal(true);
-                        }}
-                        className="flex items-center space-x-1 text-xs px-2.5 py-1 bg-amber-500 text-white font-medium rounded hover:bg-amber-600 transition-all shadow-xs cursor-pointer self-end sm:self-auto shrink-0"
-                      >
-                        <Hotel className="w-3 h-3 text-white" />
-                        <span>+ Add Stay / Hotel</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {activeDay === null ? (
-                <div className="space-y-4">
-                  {/* Summary Accommodations Overview */}
-                  {activeTrip.staysByDay && Object.keys(activeTrip.staysByDay).length > 0 && (
-                    <div className="p-3.5 bg-amber-50/50 border border-amber-200/70 rounded-lg space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2 text-xs font-semibold text-amber-900">
-                          <Hotel className="w-4 h-4 text-amber-600" />
-                          <span>Pinned Accommodations Overview</span>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                        {getGroupedStays(activeTrip.staysByDay, activeTrip.daysCount).map((group, i) => (
-                          <div key={i} className="p-2.5 bg-white border border-amber-100 rounded flex items-start justify-between gap-2 shadow-xs">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center space-x-2 flex-wrap">
-                                <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-1.5 py-0.5 rounded shrink-0">
-                                  {group.dayLabel}
-                                </span>
-                                <span className="font-semibold text-[#273c32] truncate">{group.stay.name}</span>
-                              </div>
-                              {group.stay.address && (
-                                <p className="text-[11px] text-[#7b887b] mt-1 truncate">{group.stay.address}</p>
-                              )}
-                              {group.stay.note && (
-                                <p className="text-[10px] text-amber-800/80 italic mt-0.5">{group.stay.note}</p>
-                              )}
-                            </div>
-                            <div className="flex items-center space-x-2 shrink-0">
-                              <button
-                                onClick={() => handleOpenInGoogleMaps(group.stay)}
-                                className="text-[10px] text-amber-800 hover:text-amber-950 flex items-center space-x-0.5 shrink-0 cursor-pointer"
-                              >
-                                <ExternalLink className="w-3 h-3" />
-                              </button>
-                              {group.stay.lat != null && group.stay.lng != null && (
-                                <button
-                                  onClick={() => handleOpenInYahooCarNavi(group.stay)}
-                                  className="text-[10px] text-amber-800 hover:text-amber-950 flex items-center space-x-0.5 shrink-0 cursor-pointer"
-                                  title="Open in Yahoo!カーナビ"
-                                >
-                                  <Car className="w-3 h-3" />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="p-3 bg-[#f6f5f0] border border-[#e5e1d7] rounded text-xs text-[#56665a]">
-                    Showing summary map of all added itinerary stops & saved places segregated by day. Click a day tab above to view/edit specific day schedule.
-                  </div>
-
-                  {allDayStops.length === 0 ? (
-                    <div className="text-center py-6 text-xs text-[#899489]">
-                      No stops added to any day yet. Add places from saved places or click a day to start planning!
-                    </div>
-                  ) : (
-                    <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
-                      {Array.from({ length: activeTrip.daysCount }, (_, i) => i + 1).map(dayNum => {
-                        const dayStops = sortStopsByTime(activeTrip.schedule[dayNum] || []);
-                        const dayDateStr = formatDayDate(activeTrip.startDate, dayNum, true);
-                        const dayStay = activeTrip.staysByDay?.[dayNum];
-
-                        if (dayStops.length === 0 && !dayStay) return null;
-
-                        return (
-                          <div key={dayNum} className="border border-[#e5e1d7] rounded-lg overflow-hidden bg-white">
-                            <div className="bg-[#f8f8f5] px-3 py-2 border-b border-[#e5e1d7] flex items-center justify-between">
-                              <div className="flex items-center space-x-2">
-                                <span className="font-semibold text-xs text-[#273c32]">Day {dayNum}</span>
-                                {dayDateStr && (
-                                  <span className="text-[11px] text-[#7b887b]">({dayDateStr})</span>
-                                )}
-                              </div>
-                              <span className="text-[10px] text-[#899489]">
-                                {dayStops.length} stop{dayStops.length !== 1 ? 's' : ''}
-                              </span>
-                            </div>
-
-                            <div className="p-2.5 space-y-2">
-                              {dayStay && (
-                                <div className="p-2 bg-amber-50/60 border border-amber-200/80 rounded text-xs flex items-center justify-between">
-                                  <div className="flex items-center space-x-2 min-w-0">
-                                    <Hotel className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                                    <span className="font-medium text-amber-900 truncate">Stay: {dayStay.name}</span>
-                                  </div>
-                                  <div className="flex items-center space-x-2 shrink-0">
-                                    <button
-                                      onClick={() => handleOpenInGoogleMaps(dayStay)}
-                                      className="text-[10px] text-amber-800 hover:text-amber-950 flex items-center space-x-0.5 shrink-0 cursor-pointer"
-                                    >
-                                      <ExternalLink className="w-3 h-3" />
-                                    </button>
-                                    {dayStay.lat != null && dayStay.lng != null && (
-                                      <button
-                                        onClick={() => handleOpenInYahooCarNavi(dayStay)}
-                                        className="text-[10px] text-amber-800 hover:text-amber-950 flex items-center space-x-0.5 shrink-0 cursor-pointer"
-                                        title="Open in Yahoo!カーナビ"
-                                      >
-                                        <Car className="w-3 h-3" />
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-
-                              {dayStops.map((stop, idx) => (
-                                <div key={stop.id || idx} className="p-2.5 border border-[#e5e1d7] rounded flex items-center justify-between gap-3 bg-white text-xs">
-                                  <div className="flex items-center space-x-2 min-w-0 flex-1">
-                                    <span className={`w-5 h-5 rounded-full text-white text-[10px] flex items-center justify-center font-semibold shrink-0 ${
-                                      stop.isFlight ? 'bg-sky-700' : 'bg-[#273c32]'
-                                    }`}>
-                                      {stop.isFlight ? <Plane className="w-3 h-3" /> : (idx + 1)}
-                                    </span>
-                                    <div className="min-w-0">
-                                      <div className="flex items-center space-x-2 flex-wrap">
-                                        <span className="font-medium text-[#273c32]">{stop.name}</span>
-                                        <span className="text-[10px] bg-[#f0eee7] text-[#56665a] px-1.5 py-0.5 rounded border border-[#e5e1d7]">
-                                          {stop.time || '12:00'}
-                                        </span>
-                                        {stop.isFlight && (
-                                          <span className="text-[10px] bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded font-medium border border-sky-200">
-                                            Flight
-                                          </span>
-                                        )}
-                                      </div>
-                                      {(stop.address || stop.area) && (
-                                        <p className="text-xs text-[#7b887b] mt-0.5 truncate">
-                                          {stop.address || stop.area}
-                                        </p>
-                                      )}
-                                      {stop.isFlight && stop.scheduledOut && (
-                                        <p className="text-[11px] text-sky-700 mt-0.5">Terminal {stop.departureTerminal || 'TBC'} · Gate {stop.departureGate || 'TBC'}</p>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center space-x-3 shrink-0">
-                                    <button
-                                      onClick={() => handleOpenInGoogleMaps(stop)}
-                                      className="text-[11px] text-[#56665a] hover:text-[#273c32] flex items-center space-x-1 shrink-0 cursor-pointer"
-                                    >
-                                      <ExternalLink className="w-3 h-3" />
-                                      <span>Maps</span>
-                                    </button>
-                                    {stop.lat != null && stop.lng != null && (
-                                      <button
-                                        onClick={() => handleOpenInYahooCarNavi(stop)}
-                                        className="text-[11px] text-[#56665a] hover:text-[#273c32] flex items-center space-x-1 shrink-0 cursor-pointer"
-                                        title="Open in Yahoo!カーナビ"
-                                      >
-                                        <Car className="w-3 h-3" />
-                                        <span>Yahoo!カーナビ</span>
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              ) : activeStops.length === 0 ? (
-                <div className="text-center py-8 space-y-3">
-                  <p className="text-xs text-[#899489]">No stops scheduled for Day {activeDay}.</p>
-                  <div className="flex items-center justify-center space-x-2">
-                    <button
-                      onClick={handleOpenAddFlight}
-                      className="flex items-center space-x-1 text-xs px-3 py-1.5 border border-sky-200 bg-sky-50/50 text-sky-800 rounded hover:border-sky-400 transition-all cursor-pointer"
-                    >
-                      <Plane className="w-3.5 h-3.5 text-sky-600" />
-                      <span>Add Flight</span>
-                    </button>
-                    <button
-                      onClick={() => setShowAddStopModal(true)}
-                      className="flex items-center space-x-1 text-xs px-3 py-1.5 border border-[#e5e1d7] rounded hover:border-[#273c32] transition-all cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add Stop</span>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {activeStops.map((stop, idx) => {
-                    const currentDayDateStr = getDayDateString(activeTrip.startDate, activeDay);
-                    const isClosed = !stop.isFlight && checkIsClosed(stop.time, stop.openingHours, currentDayDateStr);
-
-                    const prevStop = idx > 0 ? activeStops[idx - 1] : null;
-                    const canRoute = !stop.isFlight && prevStop && !prevStop.isFlight && prevStop.lat != null && prevStop.lng != null && stop.lat != null && stop.lng != null;
-
-                    return (
-                      <React.Fragment key={stop.id}>
-                      {canRoute && isLoaded && (
-                        <TravelTimeBar
-                          from={{ lat: Number(prevStop.lat), lng: Number(prevStop.lng) }}
-                          to={{ lat: Number(stop.lat), lng: Number(stop.lng) }}
-                          departure={getDepartureDate(currentDayDateStr, stop.time)}
-                        />
-                      )}
-                      <div
-                        className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 border rounded transition-all gap-2 sm:gap-3 ${
-                          isClosed 
-                            ? 'bg-red-50/40 border-red-200' 
-                            : stop.isFlight 
-                              ? 'bg-sky-50/40 border-sky-200' 
-                              : 'border-[#eeece4] hover:border-[#e5e1d7]'
-                        }`}
-                      >
-                        <div className="flex items-start sm:items-center space-x-3 min-w-0 flex-1">
-                          <span className={`w-6 h-6 rounded-full text-white text-xs flex items-center justify-center font-semibold shrink-0 mt-0.5 sm:mt-0 ${
-                            stop.isFlight ? 'bg-sky-700' : 'bg-[#273c32]'
-                          }`}>
-                            {stop.isFlight ? <Plane className="w-3.5 h-3.5" /> : (idx + 1)}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                              <span className="text-xs font-semibold break-words">{stop.name}</span>
-                              {stop.isFlight && (
-                                <span className="text-[10px] bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded font-medium border border-sky-200 flex items-center space-x-1">
-                                  <Plane className="w-2.5 h-2.5" />
-                                  <span>Flight</span>
-                                </span>
-                              )}
-                              <input
-                                type="time"
-                                value={stop.time || '12:00'}
-                                onChange={(e) => {
-                                  const newTime = e.target.value;
-                                  setTrips(prev =>
-                                    prev.map(trip => {
-                                      if (trip.id !== activeTrip.id) return trip;
-                                      const updated = (trip.schedule[activeDay] || []).map((s, i) =>
-                                        i === idx ? { ...s, time: newTime } : s
-                                      );
-                                      return {
-                                        ...trip,
-                                        schedule: {
-                                          ...trip.schedule,
-                                          [activeDay]: sortStopsByTime(updated)
-                                        }
-                                      };
-                                    })
-                                  );
-                                }}
-                                className="text-[10px] bg-[#f6f5f0] border border-[#e5e1d7] rounded px-1 py-0.5"
-                              />
-
-                              {stop.arrivalTime && (
-                                <span className="text-[10px] text-[#67766b]">
-                                  → Arr: {stop.arrivalTime}
-                                </span>
-                              )}
-
-                              {isClosed && (
-                                <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-semibold flex items-center space-x-1 border border-red-200">
-                                  <AlertTriangle className="w-3 h-3 text-red-600" />
-                                  <span>Closed at {stop.time}</span>
-                                </span>
-                              )}
-                            </div>
-
-                            {(stop.address || stop.area) && (
-                              <p className="text-xs text-[#7b887b] mt-0.5 break-words">
-                                {stop.address || stop.area}
-                              </p>
-                            )}
-
-                            <div className="flex items-center space-x-2 mt-0.5 flex-wrap">
-                              {stop.rating && (
-                                <span className="text-[10px] text-amber-600 font-medium flex items-center space-x-0.5">
-                                  <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
-                                  <span>{stop.rating}</span>
-                                </span>
-                              )}
-                              {stop.priceInfo && (
-                                <span className="text-[10px] text-green-700 bg-green-50 px-1 rounded border border-green-200">
-                                  {stop.priceInfo}
-                                </span>
-                              )}
-                            </div>
-
-                            {stop.openingHours?.weekdayDescriptions?.length > 0 && (
-                              <p className="text-[10px] text-[#7b887b] mt-1 max-w-[420px]">
-                                <span className="font-medium text-[#56665a]">Hours:</span>{' '}
-                                {getTodayOpeningHours(stop.openingHours) || 'See full hours'}
-                              </p>
-                            )}
-
-                            {stop.isFlight && stop.scheduledOut && (
-                              <div className="mt-2 p-2 rounded border border-sky-200/70 bg-white text-[11px] text-sky-900 space-y-1">
-                                <div className="flex flex-wrap gap-x-4 gap-y-1">
-                                  <span>Depart terminal: <strong>{stop.departureTerminal || 'Not published'}</strong></span>
-                                  <span>Depart gate: <strong>{stop.departureGate || 'Not assigned'}</strong></span>
-                                  {stop.arrivalTerminal && <span>Arrival terminal: <strong>{stop.arrivalTerminal}</strong></span>}
-                                  {stop.arrivalGate && <span>Arrival gate: <strong>{stop.arrivalGate}</strong></span>}
-                                </div>
-                                {stop.gateChangedFrom && <div className="font-semibold text-amber-700">Gate changed from {stop.gateChangedFrom} to {stop.departureGate}. Recheck airport monitors.</div>}
-                                <div className="flex flex-wrap gap-x-4 gap-y-1">
-                                  {stop.seatNumber && <span>Seat: {stop.seatNumber}</span>}
-                                  {stop.bookingRef && <span>Booking ref: {stop.bookingRef}</span>}
-                                  {stop.flightStatus && <span>Status: {stop.flightStatus}</span>}
-                                  {stop.cancelled && <span className="font-semibold text-red-700">Cancelled</span>}
-                                  {stop.estimatedDepartureTime && <span>Est. departure: {new Date(stop.estimatedDepartureTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: stop.departureTimezone || 'UTC' })} (departure local)</span>}
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2 text-[#7b887b]">
-                                  <span>{stop.lastChecked ? `AeroAPI checked ${new Date(stop.lastChecked).toLocaleString()}` : 'Live status not yet checked'}</span>
-                                  <button type="button" onClick={() => refreshSavedFlight(activeTrip.id, activeDay, stop, true)} disabled={refreshingFlightIds.includes(stop.id)}
-                                    className="inline-flex gap-1 items-center text-sky-700 font-medium disabled:opacity-50 cursor-pointer">
-                                    <RefreshCw className={`w-3 h-3 ${refreshingFlightIds.includes(stop.id) ? 'animate-spin' : ''}`} /> Refresh
-                                  </button>
-                                </div>
-                                {flightRefreshErrors[stop.id] && <p className="text-red-700">{flightRefreshErrors[stop.id]}</p>}
-                              </div>
-                            )}
-                            {stop.note && <p className="text-xs text-[#67766b] mt-0.5">{stop.note}</p>}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center space-x-1 shrink-0 self-end sm:self-center">
-                          <button
-                            onClick={() => handleOpenInGoogleMaps(stop)}
-                            className="flex items-center space-x-1 text-[11px] text-[#4b5c50] border border-[#e5e1d7] px-2 py-1 rounded hover:border-[#273c32] transition-all cursor-pointer"
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                            <span>Maps</span>
-                          </button>
-                          {stop.lat != null && stop.lng != null && (
-                            <button
-                              onClick={() => handleOpenInYahooCarNavi(stop)}
-                              className="flex items-center space-x-1 text-[11px] text-[#4b5c50] border border-[#e5e1d7] px-2 py-1 rounded hover:border-[#273c32] transition-all cursor-pointer"
-                              title="Open in Yahoo!カーナビ"
-                            >
-                              <Car className="w-3 h-3" />
-                              <span>Yahoo!カーナビ</span>
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleOpenEditStopModal(stop)}
-                            className="p-1 text-[#899489] hover:text-[#273c32] cursor-pointer"
-                            title="Edit Place"
-                          >
-                            <Pen className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleMoveStop(activeDay, idx, -1)}
-                            disabled={idx === 0}
-                            className="p-1 text-[#899489] disabled:opacity-30 cursor-pointer"
-                          >
-                            <ArrowUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleMoveStop(activeDay, idx, 1)}
-                            disabled={idx === activeStops.length - 1}
-                            className="p-1 text-[#899489] disabled:opacity-30 cursor-pointer"
-                          >
-                            <ArrowDown className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleRemoveStop(activeDay, idx)}
-                            className="p-1 text-red-500 hover:text-red-700 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </section>}
-          </div>
-          </div>
-          </div>}
-        </div>
-      )}
-
-      {profileEditing && <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4 overflow-y-auto"><form className="zen-profile-editor" onSubmit={handleProfileSave}>
-        <div className="zen-panel-top"><div><p className="zen-kicker">THE DETAILS THAT MAKE IT YOURS</p><h2>Edit profile</h2></div><button type="button" title="Close" onClick={()=>setProfileEditing(false)}><X size={21}/></button></div>
-        <label>Display name<input required minLength={1} maxLength={80} className={FIELD} value={profileDraft.name} onChange={e=>setProfileDraft(p=>({...p,name:e.target.value}))}/></label>
-        <label>Bio<textarea maxLength={240} rows={3} className={TEXTAREA} placeholder="What kind of journeys do you love?" value={profileDraft.bio} onChange={e=>setProfileDraft(p=>({...p,bio:e.target.value}))}/></label>
-        <label>Home base<input maxLength={100} className={FIELD} placeholder="e.g. Singapore" value={profileDraft.homeBase} onChange={e=>setProfileDraft(p=>({...p,homeBase:e.target.value}))}/></label>
-        <label>Travel style<input maxLength={100} className={FIELD} placeholder="e.g. Slow travel, local life" value={profileDraft.travelStyle} onChange={e=>setProfileDraft(p=>({...p,travelStyle:e.target.value}))}/></label>
-        <label>Interests<input maxLength={160} className={FIELD} placeholder="e.g. Food, nature, architecture" value={profileDraft.interests} onChange={e=>setProfileDraft(p=>({...p,interests:e.target.value}))}/></label>
-        <label>Profile photo URL (optional)<input type="url" className={FIELD} placeholder="https://example.com/my-photo.jpg" value={profileDraft.avatarUrl} onChange={e=>setProfileDraft(p=>({...p,avatarUrl:e.target.value}))}/></label>
-        {profileNotice && <p className="zen-flight-error" role="alert">{profileNotice}</p>}
-        <div className="zen-editor-actions"><button type="button" onClick={()=>setProfileEditing(false)} className="zen-button zen-button-light">Cancel</button><button type="submit" disabled={profileSaving} className="zen-button zen-button-dark"><Check size={16}/>{profileSaving?'Saving…':'Save profile'}</button></div>
-      </form></div>}
+      <footer className="max-w-[1400px] mx-auto w-full px-6 py-6 text-[11px] text-ink-3 flex items-center justify-between">
+        <span className="flex items-center gap-2"><BrandMark className="w-5 h-5" /> Travelogue · by Li Ze Ying</span>
+        <span className="flex items-center gap-1.5"><Database className={`w-3.5 h-3.5 ${dbError ? 'text-red-500' : isDbSyncing ? 'text-amber-500 animate-spin' : 'text-sage'}`} />{dbError ? 'Sync error' : isDbSyncing ? 'Syncing…' : 'Synced to MongoDB Atlas'}</span>
+      </footer>
 
       {/* Invitation link: guests join using their own signed-in account. */}
       {pendingInvite && (
-        <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md space-y-4">
+        <div className="fixed inset-0 z-[70] bg-ink/50 backdrop-blur-[2px] flex items-center justify-center p-4">
+          <div className="bg-paper rounded-2xl shadow-2xl p-6 w-full max-w-md space-y-4">
             <div className="flex items-center gap-2"><Users className="w-5 h-5" /><h3 className="font-serif text-xl">Join a shared trip</h3></div>
-            <p className="text-sm text-[#67766b]">Accept this invitation to co-edit the itinerary using your Travelogue account. Other collaborators can see your name and email address.</p>
+            <p className="text-sm text-ink-2">Accept this invitation to co-edit the itinerary using your Travelogue account. Other collaborators can see your name and email address.</p>
             {joinError && <p className="text-xs text-red-600">{joinError}</p>}
             <div className="flex gap-3 justify-end">
-              <button disabled={joinBusy} onClick={clearInvitation} className="text-xs px-4 py-2 rounded border border-[#dddddd] cursor-pointer">Cancel</button>
-              <button disabled={joinBusy || !tripsLoaded} onClick={handleJoinTrip} className="text-xs px-4 py-2 rounded bg-[#273c32] text-white cursor-pointer disabled:opacity-50">
+              <button disabled={joinBusy} onClick={clearInvitation} className="text-xs px-4 py-2 rounded-full border border-line cursor-pointer">Cancel</button>
+              <button disabled={joinBusy || !tripsLoaded} onClick={handleJoinTrip} className="text-xs px-4 py-2 rounded-full bg-sage-deep text-white cursor-pointer disabled:opacity-50">
                 {joinBusy ? 'Joining...' : 'Join as editor'}
               </button>
             </div>
@@ -3362,42 +1710,42 @@ export default function App() {
 
       {/* Sharing and collaborator management */}
       {showShareModal && activeTrip && (
-        <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-[#f6f5f0] border border-[#e5e1d7] rounded-xl shadow-xl p-5 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-5">
-            <div className="flex justify-between items-center border-b border-[#e5e1d7] pb-3">
+        <div className="fixed inset-0 z-[60] bg-ink/40 backdrop-blur-[2px] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-cream border border-line rounded-xl shadow-xl p-5 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-5">
+            <div className="flex justify-between items-center border-b border-line pb-3">
               <div className="flex items-center gap-2"><Users className="w-5 h-5" /><h3 className="font-serif text-lg">Trip collaboration</h3></div>
-              <button onClick={() => setShowShareModal(false)} className="p-1.5 rounded hover:bg-[#eeeeea] cursor-pointer" aria-label="Close"><X className="w-4 h-4" /></button>
+              <button onClick={() => setShowShareModal(false)} className="p-1.5 rounded hover:bg-cream-2 cursor-pointer" aria-label="Close"><X className="w-4 h-4" /></button>
             </div>
             {shareError && <div className="text-xs text-red-700 bg-red-50 p-3 rounded">{shareError}</div>}
             {!activeTrip.sharedId ? (
               <div className="space-y-4">
-                <p className="text-sm text-[#56665a]">Invite friends to edit saved places, daily schedules, flights and stays together. Everyone needs a Travelogue account.</p>
-                <button disabled={shareBusy} onClick={handleEnableSharing} className="w-full px-4 py-3 bg-[#273c32] text-white text-xs rounded-lg disabled:opacity-50 cursor-pointer">
+                <p className="text-sm text-ink-2">Invite friends to edit saved places, daily schedules, flights and stays together. Everyone needs a Travelogue account.</p>
+                <button disabled={shareBusy} onClick={handleEnableSharing} className="w-full px-4 py-3 bg-sage-deep text-white text-xs rounded-full disabled:opacity-50 cursor-pointer">
                   {shareBusy ? 'Enabling...' : 'Enable co-editing & generate invite link'}
                 </button>
               </div>
             ) : !shareDetails ? (
-              <p className="text-xs text-[#67766b]">{shareBusy ? 'Loading shared trip...' : 'Unable to load sharing details.'}</p>
+              <p className="text-xs text-ink-2">{shareBusy ? 'Loading shared trip...' : 'Unable to load sharing details.'}</p>
             ) : (
               <div className="space-y-5">
-                <div className="text-xs flex items-center gap-2 text-[#67766b]"><CheckCircle2 className="w-4 h-4 text-emerald-600" /> Automatic sync • checks for changes every 6 seconds</div>
+                <div className="text-xs flex items-center gap-2 text-ink-2"><CheckCircle2 className="w-4 h-4 text-emerald-600" /> Automatic sync • checks for changes every 6 seconds</div>
                 {shareDetails.role === 'owner' && (
                   <section className="space-y-2">
                     <p className="font-medium text-sm flex items-center gap-1.5"><Link2 className="w-4 h-4" /> Invitation link</p>
-                    <p className="text-xs text-[#67766b]">Anyone with this link can join as an editor after signing in. Share it only with people you trust.</p>
+                    <p className="text-xs text-ink-2">Anyone with this link can join as an editor after signing in. Share it only with people you trust.</p>
                     <div className="flex gap-2">
                       <input readOnly aria-label="Invitation link" value={shareLink} onFocus={e => e.target.select()} className={FIELD} />
-                      <button onClick={handleCopyShareLink} className="px-3 py-2 bg-[#273c32] text-white rounded flex gap-1 items-center text-xs cursor-pointer"><Copy className="w-4 h-4" />{linkCopied ? 'Copied' : 'Copy'}</button>
+                      <button onClick={handleCopyShareLink} className="px-3 py-2 bg-sage-deep text-white rounded-full flex gap-1 items-center text-xs cursor-pointer"><Copy className="w-4 h-4" />{linkCopied ? 'Copied' : 'Copy'}</button>
                     </div>
-                    <button onClick={() => handleShareAction('regenerate')} disabled={shareBusy} className="text-xs underline text-[#67766b] hover:text-[#273c32] cursor-pointer disabled:opacity-50">Reset invitation link</button>
+                    <button onClick={() => handleShareAction('regenerate')} disabled={shareBusy} className="text-xs underline text-ink-2 hover:text-ink cursor-pointer disabled:opacity-50">Reset invitation link</button>
                   </section>
                 )}
                 <section className="space-y-2">
                   <h4 className="font-medium text-sm">Collaborators ({shareDetails.members?.length || 0})</h4>
-                  <div className="divide-y border-y border-[#e5e1d7]">
+                  <div className="divide-y border-y border-line">
                     {(shareDetails.members || []).map(member => (
                       <div key={member.id} className="py-3 flex justify-between items-center gap-2">
-                        <div className="min-w-0"><p className="text-xs font-medium truncate">{member.name} <span className="text-[#a4aca2]">· {member.role}</span></p><p className="text-[11px] text-[#7b887b] truncate">{member.email}</p></div>
+                        <div className="min-w-0"><p className="text-xs font-medium truncate">{member.name} <span className="text-ink-3">· {member.role}</span></p><p className="text-[11px] text-ink-3 truncate">{member.email}</p></div>
                         {shareDetails.role === 'owner' && member.role === 'editor' && (
                           <button disabled={shareBusy} onClick={() => handleShareAction('remove', { memberId: member.id })} title="Remove editor" className="p-2 text-red-600 cursor-pointer disabled:opacity-50"><UserMinus className="w-4 h-4" /></button>
                         )}
@@ -3405,7 +1753,7 @@ export default function App() {
                     ))}
                   </div>
                 </section>
-                <div className="border-t border-[#e5e1d7] pt-3">
+                <div className="border-t border-line pt-3">
                   {shareDetails.role === 'owner' ? (
                     <button disabled={shareBusy} onClick={() => handleShareAction('stop')} className="text-xs text-red-600 underline cursor-pointer disabled:opacity-50">Stop sharing (keep my private trip)</button>
                   ) : (
@@ -3420,20 +1768,20 @@ export default function App() {
 
       {/* Edit Dates Modal */}
       {showEditDatesModal && activeTrip && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-ink/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <form
             onSubmit={handleSaveEditedDates}
-            className="bg-[#f6f5f0] border border-[#e5e1d7] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
           >
-            <div className="flex items-center justify-between border-b border-[#e5e1d7] pb-3">
+            <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center space-x-2">
-                <Calendar className="w-5 h-5 text-[#273c32]" />
+                <Calendar className="w-5 h-5 text-ink" />
                 <span>Edit Itinerary Dates</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setShowEditDatesModal(false)}
-                className="text-xs text-[#899489] hover:text-[#273c32] cursor-pointer"
+                className="text-xs text-ink-3 hover:text-ink cursor-pointer"
               >
                 Close
               </button>
@@ -3471,22 +1819,22 @@ export default function App() {
                   />
                 </div>
               </div>
-              <p className="text-[11px] text-[#7b887b]">
+              <p className="text-[11px] text-ink-3">
                 Total Duration: {calculateDaysCount(editDatesForm.startDate, editDatesForm.endDate)} day(s)
               </p>
             </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e5e1d7]">
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-line">
               <button
                 type="button"
                 onClick={() => setShowEditDatesModal(false)}
-                className="px-3 py-1.5 border border-[#e5e1d7] text-[#67766b] rounded hover:border-[#273c32] text-xs cursor-pointer"
+                className="px-4 py-2 border border-line text-ink-2 rounded-full hover:border-sage text-xs cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 bg-[#273c32] text-white rounded text-xs font-medium hover:bg-[#375448] transition-all cursor-pointer shadow-xs"
+                className="px-4 py-2 bg-sage-deep text-white rounded-full text-xs font-medium hover:bg-[#46553a] transition-all cursor-pointer shadow-xs"
               >
                 Save Changes
               </button>
@@ -3497,12 +1845,12 @@ export default function App() {
 
       {/* Stay / Hotel modal */}
       {showStayModal && activeTrip && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-ink/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <form
             onSubmit={handleSetStayForDays}
-            className="bg-[#f6f5f0] border border-[#e5e1d7] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
           >
-            <div className="flex items-center justify-between border-b border-[#e5e1d7] pb-3">
+            <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center space-x-2">
                 <Hotel className="w-5 h-5 text-amber-600" />
                 <span>Add Stay / Hotel</span>
@@ -3510,7 +1858,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setShowStayModal(false)}
-                className="text-xs text-[#899489] hover:text-[#273c32] cursor-pointer"
+                className="text-xs text-ink-3 hover:text-ink cursor-pointer"
               >
                 Close
               </button>
@@ -3519,8 +1867,8 @@ export default function App() {
             {/* Quick Selector from Saved Places */}
             {activeTrip.savedPlaces && activeTrip.savedPlaces.length > 0 && (
               <div className="space-y-1.5 text-xs">
-                <label className="block text-xs font-medium text-[#67766b]">Select from Saved Places</label>
-                <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 bg-white border border-[#e5e1d7] rounded">
+                <label className="block text-xs font-medium text-ink-2">Select from Saved Places</label>
+                <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 bg-paper border border-line rounded">
                   {activeTrip.savedPlaces.map((place) => (
                     <button
                       key={place.id}
@@ -3540,7 +1888,7 @@ export default function App() {
                       className={`text-[11px] px-2 py-1 rounded border transition-all flex items-center space-x-1 cursor-pointer ${
                         stayForm.name === place.name
                           ? 'bg-amber-500 text-white border-amber-600 font-medium'
-                          : 'bg-[#f8f8f5] border-[#e5e1d7] text-[#375448] hover:border-amber-400'
+                          : 'bg-cream-2 border-line text-ink-2 hover:border-amber-400'
                       }`}
                     >
                       <Hotel className="w-3 h-3" />
@@ -3632,17 +1980,17 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e5e1d7]">
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-line">
               <button
                 type="button"
                 onClick={() => setShowStayModal(false)}
-                className="px-3 py-1.5 border border-[#e5e1d7] text-[#67766b] rounded hover:border-[#273c32] text-xs cursor-pointer"
+                className="px-4 py-2 border border-line text-ink-2 rounded-full hover:border-sage text-xs cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 bg-amber-600 text-white rounded text-xs font-medium hover:bg-amber-700 transition-all cursor-pointer shadow-xs"
+                className="px-4 py-2 bg-clay text-white rounded-full text-xs font-medium hover:bg-clay-deep transition-all cursor-pointer shadow-xs"
               >
                 Save Accommodation
               </button>
@@ -3653,20 +2001,20 @@ export default function App() {
 
       {/* Add Stop Modal */}
       {showAddStopModal && activeTrip && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-ink/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <form
             onSubmit={handleAddDirectStop}
-            className="bg-[#f6f5f0] border border-[#e5e1d7] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
           >
-            <div className="flex items-center justify-between border-b border-[#e5e1d7] pb-3">
+            <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center space-x-2">
-                <Plus className="w-5 h-5 text-[#273c32]" />
+                <Plus className="w-5 h-5 text-ink" />
                 <span>Add Custom Stop (Day {activeDay || 1})</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setShowAddStopModal(false)}
-                className="text-xs text-[#899489] hover:text-[#273c32] cursor-pointer"
+                className="text-xs text-ink-3 hover:text-ink cursor-pointer"
               >
                 Close
               </button>
@@ -3725,17 +2073,17 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e5e1d7]">
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-line">
               <button
                 type="button"
                 onClick={() => setShowAddStopModal(false)}
-                className="px-3 py-1.5 border border-[#e5e1d7] text-[#67766b] rounded hover:border-[#273c32] text-xs cursor-pointer"
+                className="px-4 py-2 border border-line text-ink-2 rounded-full hover:border-sage text-xs cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 bg-[#273c32] text-white rounded text-xs font-medium hover:bg-[#375448] transition-all cursor-pointer shadow-xs"
+                className="px-4 py-2 bg-sage-deep text-white rounded-full text-xs font-medium hover:bg-[#46553a] transition-all cursor-pointer shadow-xs"
               >
                 Add Stop
               </button>
@@ -3746,20 +2094,20 @@ export default function App() {
 
       {/* Edit Stop Modal */}
       {showEditStopModal && activeTrip && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-ink/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <form
             onSubmit={handleSaveEditedStop}
-            className="bg-[#f6f5f0] border border-[#e5e1d7] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
           >
-            <div className="flex items-center justify-between border-b border-[#e5e1d7] pb-3">
+            <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center space-x-2">
-                <Pen className="w-5 h-5 text-[#273c32]" />
+                <Pen className="w-5 h-5 text-ink" />
                 <span>Edit Place in Itinerary (Day {activeDay})</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setShowEditStopModal(false)}
-                className="text-xs text-[#899489] hover:text-[#273c32] cursor-pointer"
+                className="text-xs text-ink-3 hover:text-ink cursor-pointer"
               >
                 Close
               </button>
@@ -3829,17 +2177,17 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e5e1d7]">
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-line">
               <button
                 type="button"
                 onClick={() => setShowEditStopModal(false)}
-                className="px-3 py-1.5 border border-[#e5e1d7] text-[#67766b] rounded hover:border-[#273c32] text-xs cursor-pointer"
+                className="px-4 py-2 border border-line text-ink-2 rounded-full hover:border-sage text-xs cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 bg-[#273c32] text-white rounded text-xs font-medium hover:bg-[#375448] transition-all cursor-pointer shadow-xs"
+                className="px-4 py-2 bg-sage-deep text-white rounded-full text-xs font-medium hover:bg-[#46553a] transition-all cursor-pointer shadow-xs"
               >
                 Save Changes
               </button>
@@ -3850,14 +2198,14 @@ export default function App() {
 
       {/* Add Flight Modal — flight number and departure date only; airports/times come from AeroAPI. */}
       {showAddFlightModal && activeTrip && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-[#f6f5f0] border border-[#e5e1d7] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-[#e5e1d7] pb-3">
+        <div className="fixed inset-0 bg-ink/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center gap-2">
                 <Plane className="w-5 h-5 text-sky-600" /> Add Flight
               </h3>
               <button type="button" onClick={() => setShowAddFlightModal(false)}
-                className="text-xs text-[#899489] hover:text-[#273c32] cursor-pointer">Close</button>
+                className="text-xs text-ink-3 hover:text-ink cursor-pointer">Close</button>
             </div>
 
             <form onSubmit={handleSearchFlight} className="space-y-3">
@@ -3876,7 +2224,7 @@ export default function App() {
                 </div>
               </div>
               <button type="submit" disabled={flightLookupBusy}
-                className="w-full flex justify-center items-center gap-2 rounded bg-sky-700 text-white text-xs font-semibold py-2.5 disabled:opacity-50 cursor-pointer">
+                className="w-full flex justify-center items-center gap-2 rounded-full bg-sky-700 text-white text-xs font-semibold py-2.5 disabled:opacity-50 cursor-pointer">
                 {flightLookupBusy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
                 {flightLookupBusy ? 'Searching AeroAPI…' : 'Find scheduled flight'}
               </button>
@@ -3890,14 +2238,14 @@ export default function App() {
                 <div className="space-y-2 max-h-56 overflow-y-auto">
                   {flightMatches.map((flight, idx) => (
                     <label key={`${flight.scheduledOut}_${flight.originCode}_${idx}`}
-                      className={`flex items-start gap-2 p-3 cursor-pointer rounded border text-xs ${selectedFlightIndex === idx ? 'border-sky-600 bg-sky-50' : 'border-[#e5e1d7] bg-white'}`}>
+                      className={`flex items-start gap-2 p-3 cursor-pointer rounded border text-xs ${selectedFlightIndex === idx ? 'border-sky-600 bg-sky-50' : 'border-line bg-paper'}`}>
                       <input type="radio" name="selectedFlight" className="mt-0.5" checked={selectedFlightIndex === idx}
                         onChange={() => setSelectedFlightIndex(idx)} />
                       <div className="space-y-1 min-w-0">
                         <div className="font-semibold">{flight.originCode} → {flight.destinationCode}</div>
                         <div>{flight.departureAirport} → {flight.arrivalAirport}</div>
-                        <div className="text-[#67766b]">{flight.departureTime || 'Time unavailable'} → {flight.arrivalTime || 'Time unavailable'} (local airport times)</div>
-                        <div className="text-[#67766b]">Departure terminal: {flight.departureTerminal || 'Not published'} · Gate: {flight.departureGate || 'Not assigned'}</div>
+                        <div className="text-ink-2">{flight.departureTime || 'Time unavailable'} → {flight.arrivalTime || 'Time unavailable'} (local airport times)</div>
+                        <div className="text-ink-2">Departure terminal: {flight.departureTerminal || 'Not published'} · Gate: {flight.departureGate || 'Not assigned'}</div>
                       </div>
                     </label>
                   ))}
@@ -3914,13 +2262,13 @@ export default function App() {
                       onChange={e => setNewFlight(prev => ({ ...prev, bookingRef: e.target.value }))} className={FIELD} />
                   </div>
                 </div>
-                <p className="text-[11px] text-[#7b887b]">Terminal and gate depend on airline/airport reporting. Gate details are checked again automatically on flight day while the app is open. Seat and booking reference are visible to trip collaborators.</p>
+                <p className="text-[11px] text-ink-3">Terminal and gate depend on airline/airport reporting. Gate details are checked again automatically on flight day while the app is open. Seat and booking reference are visible to trip collaborators.</p>
               </div>
             )}
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#e5e1d7]">
-              <button type="button" onClick={() => setShowAddFlightModal(false)} className="px-3 py-1.5 border border-[#e5e1d7] text-[#67766b] rounded text-xs cursor-pointer">Cancel</button>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
+              <button type="button" onClick={() => setShowAddFlightModal(false)} className="px-4 py-2 border border-line text-ink-2 rounded-full text-xs cursor-pointer">Cancel</button>
               <button type="button" onClick={handleAddFlight} disabled={!flightMatches.length || flightLookupBusy}
-                className="px-4 py-1.5 bg-sky-700 text-white rounded text-xs font-medium disabled:opacity-40 cursor-pointer">Add Flight</button>
+                className="px-4 py-2 bg-sky-700 text-white rounded-full text-xs font-medium disabled:opacity-40 cursor-pointer">Add Flight</button>
             </div>
           </div>
         </div>
@@ -3928,20 +2276,20 @@ export default function App() {
 
       {/* New Place Modal */}
       {showNewPlaceModal && activeTrip && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-ink/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <form
             onSubmit={handleCreatePlace}
-            className="bg-[#f6f5f0] border border-[#e5e1d7] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
           >
-            <div className="flex items-center justify-between border-b border-[#e5e1d7] pb-3">
+            <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center space-x-2">
-                <BookmarkPlus className="w-5 h-5 text-[#273c32]" />
+                <BookmarkPlus className="w-5 h-5 text-ink" />
                 <span>Add Custom Place to Saved</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setShowNewPlaceModal(false)}
-                className="text-xs text-[#899489] hover:text-[#273c32] cursor-pointer"
+                className="text-xs text-ink-3 hover:text-ink cursor-pointer"
               >
                 Close
               </button>
@@ -4014,17 +2362,17 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e5e1d7]">
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-line">
               <button
                 type="button"
                 onClick={() => setShowNewPlaceModal(false)}
-                className="px-3 py-1.5 border border-[#e5e1d7] text-[#67766b] rounded hover:border-[#273c32] text-xs cursor-pointer"
+                className="px-4 py-2 border border-line text-ink-2 rounded-full hover:border-sage text-xs cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 bg-[#273c32] text-white rounded text-xs font-medium hover:bg-[#375448] transition-all cursor-pointer shadow-xs"
+                className="px-4 py-2 bg-sage-deep text-white rounded-full text-xs font-medium hover:bg-[#46553a] transition-all cursor-pointer shadow-xs"
               >
                 Save Place
               </button>
@@ -4035,20 +2383,20 @@ export default function App() {
 
       {/* New Trip Modal */}
       {showNewTripModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-ink/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <form
             onSubmit={handleCreateTrip}
-            className="bg-[#f6f5f0] border border-[#e5e1d7] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
           >
-            <div className="flex items-center justify-between border-b border-[#e5e1d7] pb-3">
+            <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center space-x-2">
-                <Globe className="w-5 h-5 text-[#273c32]" />
+                <Globe className="w-5 h-5 text-ink" />
                 <span>Create New Itinerary</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setShowNewTripModal(false)}
-                className="text-xs text-[#899489] hover:text-[#273c32] cursor-pointer"
+                className="text-xs text-ink-3 hover:text-ink cursor-pointer"
               >
                 Close
               </button>
@@ -4128,17 +2476,17 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e5e1d7]">
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-line">
               <button
                 type="button"
                 onClick={() => setShowNewTripModal(false)}
-                className="px-3 py-1.5 border border-[#e5e1d7] text-[#67766b] rounded hover:border-[#273c32] text-xs cursor-pointer"
+                className="px-4 py-2 border border-line text-ink-2 rounded-full hover:border-sage text-xs cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 bg-[#273c32] text-white rounded text-xs font-medium hover:bg-[#375448] transition-all cursor-pointer shadow-xs"
+                className="px-4 py-2 bg-sage-deep text-white rounded-full text-xs font-medium hover:bg-[#46553a] transition-all cursor-pointer shadow-xs"
               >
                 Create Itinerary
               </button>
