@@ -3,7 +3,7 @@ import { Home, Bookmark, CalendarDays, Plane, User, Bell, ChevronRight } from 'l
 
 export const NAV_ITEMS = [
   { key: 'overview', label: 'Overview', Icon: Home },
-  { key: 'saved', label: 'Saved Places', Icon: Bookmark },
+  { key: 'saved', label: 'Saved Places', mobileLabel: 'Saved', Icon: Bookmark },
   { key: 'itinerary', label: 'Itinerary', Icon: CalendarDays },
   { key: 'flights', label: 'Flights', Icon: Plane },
   { key: 'profile', label: 'Profile', Icon: User }
@@ -20,18 +20,19 @@ export function BrandMark({ className = 'w-9 h-9' }) {
 }
 
 /* ---------- Top navigation ---------- */
-export function TopNav({ page, onNavigate, user, notifications = 0, onBell, onAvatar }) {
+export function TopNav({ page, onNavigate, user, avatar, notifications = 0, onBell, onAvatar }) {
   const initial = user?.name ? user.name[0].toUpperCase() : 'U';
   return (
+    <>
     <header className="sticky top-0 z-40 bg-cream/90 backdrop-blur border-b border-line">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-16 flex items-center gap-3 sm:gap-6">
         <button onClick={() => onNavigate('overview')} className="flex items-center gap-2 shrink-0 cursor-pointer">
           <BrandMark />
           <span className="font-serif text-[22px] sm:text-2xl tracking-tight text-ink">Travelogue</span>
         </button>
-        <span className="hidden md:block h-7 w-px bg-line-2" />
+        <span className="hidden lg:block h-7 w-px bg-line-2" />
 
-        <nav className="hidden md:flex items-center gap-1 flex-1 justify-center">
+        <nav className="hidden lg:flex items-center gap-1 flex-1 justify-center">
           {NAV_ITEMS.map(({ key, label, Icon }) => {
             const active = page === key;
             return (
@@ -50,31 +51,32 @@ export function TopNav({ page, onNavigate, user, notifications = 0, onBell, onAv
         </nav>
 
         <div className="ml-auto flex items-center gap-3 sm:gap-4">
-          <span className="hidden md:block h-7 w-px bg-line-2" />
+          <span className="hidden lg:block h-7 w-px bg-line-2" />
           <button onClick={onBell} className="relative p-2 rounded-full hover:bg-cream-2 cursor-pointer" title="Notifications">
             <Bell className="w-5 h-5 text-ink-2" strokeWidth={1.8} />
             {notifications > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-clay ring-2 ring-cream" />}
           </button>
-          <button onClick={onAvatar} className="w-10 h-10 rounded-full bg-gradient-to-br from-sage to-sage-deep text-white font-serif text-lg flex items-center justify-center ring-2 ring-paper shadow-sm cursor-pointer" title={user?.name}>
-            {initial}
+          <button onClick={onAvatar} className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-sage to-sage-deep text-white font-serif text-lg flex items-center justify-center ring-2 ring-paper shadow-sm cursor-pointer" title={user?.name}>
+            {avatar ? <img src={avatar} alt="Your profile" className="w-full h-full object-cover" /> : initial}
           </button>
         </div>
       </div>
 
-      {/* Mobile nav */}
-      <nav className="md:hidden flex items-center justify-around border-t border-line bg-cream px-1 py-1">
-        {NAV_ITEMS.map(({ key, label, Icon }) => {
+    </header>
+      {/* Mobile navigation stays within thumb reach, without squeezing the header. */}
+      <nav aria-label="Mobile navigation" className="lg:hidden fixed bottom-0 left-0 right-0 z-50 grid grid-cols-5 gap-0.5 border-t border-line bg-paper/95 backdrop-blur px-1 pt-2 pb-[max(8px,env(safe-area-inset-bottom))] shadow-[0_-6px_25px_rgba(45,41,36,0.06)]">
+        {NAV_ITEMS.map(({ key, label, mobileLabel, Icon }) => {
           const active = page === key;
           return (
-            <button key={key} onClick={() => onNavigate(key)}
-              className={`flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl text-[10px] cursor-pointer ${active ? 'bg-sage-soft text-ink font-medium' : 'text-ink-2'}`}>
-              <Icon className="w-5 h-5" strokeWidth={1.8} />
-              <span>{label}</span>
+            <button key={key} onClick={() => onNavigate(key)} aria-current={active ? 'page' : undefined}
+              className={`min-w-0 min-h-12 flex flex-col items-center justify-center gap-1 px-1 rounded-xl text-[10px] cursor-pointer ${active ? 'bg-sage-soft text-ink font-semibold' : 'text-ink-2'}`}>
+              <Icon className="w-[19px] h-[19px] shrink-0" strokeWidth={1.8} />
+              <span className="truncate max-w-full">{mobileLabel || label}</span>
             </button>
           );
         })}
       </nav>
-    </header>
+    </>
   );
 }
 

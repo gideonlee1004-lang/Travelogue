@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { GoogleMap, MarkerF, PolylineF } from '@react-google-maps/api';
 import { Plus, Minus, LocateFixed, Maximize2 } from 'lucide-react';
 import { MAP_OPTIONS, pinForPlace, pinForStop, STAY_PIN, COLORS, makePin } from '../theme.js';
+import { fetchTravel, TRAVEL_MODES } from '../lib/helpers.js';
+import { decodeRoutePolyline } from '../lib/routePolyline.js';
 
 const CONTAINER = { width: '100%', height: '100%' };
 
@@ -34,10 +36,15 @@ const ll = o => ({ lat: Number(o.lat), lng: Number(o.lng) });
 export function TripMap({
   isLoaded, loadError, center, zoom = 11,
   places = [], stops = [], stays = [], route = true, routePath = null,
+  roadRouting = false, routeGroups = null,
   fitKey, padding = 48, className = '', controls = true, onExpand, onMarkerClick,
   highlightId = null
 }) {
   const [map, setMap] = useState(null);
+  const mapOptions = useMemo(() => ({
+    ...MAP_OPTIONS,
+    gestureHandling: typeof window !== 'undefined' && window.matchMedia?.('(max-width: 1023px)').matches ? 'cooperative' : MAP_OPTIONS.gestureHandling
+  }), []);
   const onLoad = useCallback(m => setMap(m), []);
   const onUnmount = useCallback(() => setMap(null), []);
   const lastFit = useRef('');
@@ -72,11 +79,39 @@ export function TripMap({
   }, [map, points, fitKey, center, zoom, padding]);
 
   const routeLine = useMemo(() => {
+    if (roadRouting) return null;
     if (routePath) return routePath;
     if (!route) return null;
     const pts = stops.filter(s => !s.isFlight && hasCoords(s)).map(ll);
     return pts.length > 1 ? pts : null;
-  }, [stops, route, routePath]);
+  }, [stops, route, routePath, roadRouting]);
+
+  // Road geometry is fetched for adjacent stops only. Flights and day boundaries
+  // break a road route; no phantom road segment is drawn through an airport flight.
+  const roadSignature = JSON.stringify((roadRouting ? (routeGroups || [stops]) : []).map(group =>
+    group.map(p => p?.isFlight ? null : hasCoords(p) ? ll(p) : null)
+  ));
+  const [roadPaths, setRoadPaths] = useState([]);
+  const [roadStatus, setRoadStatus] = useState('idle');
+  useEffect(() => {
+    if (!roadRouting || !isLoaded || loadError) { setRoadPaths([]); setRoadStatus('idle'); return; }
+    const groups = JSON.parse(roadSignature);
+    const pairs = groups.flatMap(group => group.slice(1).map((to, i) => [group[i], to])
+      .filter(([from, to]) => from && to && (from.lat !== to.lat || from.lng !== to.lng)));
+    if (!pairs.length) { setRoadPaths([]); setRoadStatus('idle'); return; }
+    let cancelled = false;
+    setRoadStatus('loading');
+    setRoadPaths([]);
+    Promise.all(pairs.map(async ([from, to]) => {
+      const result = await fetchTravel(from, to, TRAVEL_MODES[2]);
+      return decodeRoutePolyline(result?.encodedPolyline);
+    })).then(paths => {
+      if (cancelled) return;
+      setRoadPaths(paths.filter(path => path.length >= 2));
+      setRoadStatus(paths.some(path => path.length >= 2) ? 'ready' : 'unavailable');
+    }).catch(() => { if (!cancelled) { setRoadPaths([]); setRoadStatus('unavailable'); } });
+    return () => { cancelled = true; };
+  }, [roadRouting, roadSignature, isLoaded, loadError]);
 
   const zoomBy = d => { if (map) map.setZoom((map.getZoom() || zoom) + d); };
   const recenter = () => { lastFit.current = ''; setMap(m => m); if (map && points.length) { const b = new window.google.maps.LatLngBounds(); points.forEach(p => b.extend(p)); points.length > 1 ? map.fitBounds(b, { top: padding, right: padding, bottom: padding, left: padding }) : (map.panTo(points[0]), map.setZoom(14)); } };
@@ -84,12 +119,15 @@ export function TripMap({
   return (
     <div className={`${/\babsolute\b/.test(className) ? '' : 'relative'} overflow-hidden bg-[#f1ead9] ${className}`} style={{ minHeight: 160 }}>
       {loadError ? (
-        <div className="absolute inset-0 flex items-center justify-center text-xs text-red-600 p-4">Google Maps failed to load.</div>
+        <div className="absolute inset-0 flex items-center justify-center text-xs text-red-600 p-4">Map could not load.</div>
       ) : !isLoaded ? (
         <div className="absolute inset-0 flex items-center justify-center text-xs text-ink-3">Loading map…</div>
       ) : (
         <div className="absolute inset-0">
-        <GoogleMap mapContainerStyle={CONTAINER} center={center || { lat: 35.68, lng: 139.76 }} zoom={zoom} options={MAP_OPTIONS} onLoad={onLoad} onUnmount={onUnmount}>
+        <GoogleMap mapContainerStyle={CONTAINER} center={center || { lat: 35.68, lng: 139.76 }} zoom={zoom} options={mapOptions} onLoad={onLoad} onUnmount={onUnmount}>
+          {roadRouting && roadPaths.map((path, i) => (
+            <PolylineF key={`road_${i}`} path={path} options={{ strokeColor: COLORS.sageDeep, strokeWeight: 4, strokeOpacity: 0.9, zIndex: 1 }} />
+          ))}
           {routeLine && (
             <PolylineF path={routeLine} options={{
               strokeOpacity: 0, strokeWeight: 3,
@@ -133,6 +171,9 @@ export function TripMap({
         </div>
       )}
 
+      {roadRouting && roadStatus === 'unavailable' && (
+        <div className="absolute bottom-3 left-3 z-10 rounded-lg border border-line bg-paper/95 px-2.5 py-1.5 text-[11px] text-ink-2 shadow-sm">Road directions unavailable</div>
+      )}
       {controls && isLoaded && !loadError && (
         <div className="absolute right-3 bottom-3 flex flex-col gap-1.5">
           {onExpand && (

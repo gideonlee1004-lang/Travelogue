@@ -151,11 +151,15 @@ export function makePin({ color = COLORS.clay, glyph = 'pin', size = 40, label =
   const w = size, h = Math.round(size * 1.3);
   const svg = `
   <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 40 52">
-    <defs><filter id="s" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="#000" flood-opacity="0.25"/></filter></defs>
-    <path filter="url(#s)" d="M20 50 C20 50 4 32 4 19 A16 16 0 0 1 36 19 C36 32 20 50 20 50 Z" fill="${color}" stroke="#fffdf8" stroke-width="2.5"/>
+    <defs>
+      <filter id="s" x="-25%" y="-25%" width="150%" height="150%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#514332" flood-opacity="0.28"/></filter>
+      <linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="${color}"/><stop offset="1" stop-color="${color}" stop-opacity="0.86"/></linearGradient>
+    </defs>
+    <path filter="url(#s)" d="M20 49 C16 43 3.5 30 3.5 19 A16.5 16.5 0 0 1 36.5 19 C36.5 30 24 43 20 49 Z" fill="url(#g)" stroke="#fffdf8" stroke-width="2.4"/>
+    <circle cx="20" cy="19.5" r="13.4" fill="none" stroke="#fffdf8" stroke-width="0.8" stroke-opacity="0.36"/>
     ${label
-      ? `<text x="20" y="24" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="700" fill="#fffdf8">${label}</text>`
-      : `<g transform="translate(10 9) scale(0.85)" fill="none" stroke="#fffdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${GLYPHS[glyph] || GLYPHS.pin}</g>`}
+      ? `<text x="20" y="24.5" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="700" fill="#fffdf8">${label}</text>`
+      : `<g transform="translate(10.1 9.3) scale(0.82)" fill="none" stroke="#fffdf8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${GLYPHS[glyph] || GLYPHS.pin}</g>`}
   </svg>`;
   const icon = {
     url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
@@ -173,7 +177,13 @@ export function pinForPlace(place, opts = {}) {
 
 export function pinForStop(stop, index) {
   if (stop?.isFlight) return makePin({ color: CATEGORIES.Flights.color, glyph: 'plane' });
-  return makePin({ color: COLORS.sageDeep, label: String(index + 1) });
+  const kinds = (stop?.types || []).join(' ').toLowerCase();
+  const cat = stop?.category;
+  if (/restaurant|cafe|bakery|food|market|sushi|ramen/.test(kinds) || cat === 'Food & Eats') return makePin({ color: '#b9774c', glyph: 'utensils', size: 42 });
+  if (/temple|shrine|place_of_worship/.test(kinds)) return makePin({ color: COLORS.clay, glyph: 'torii', size: 42 });
+  if (/forest|park|garden|nature|mountain|lake|hiking/.test(kinds) || cat === 'Experiences') return makePin({ color: COLORS.sageDeep, glyph: 'tree', size: 42 });
+  if (/hotel|lodging|ryokan/.test(kinds) || cat === 'Stays/Hotel') return STAY_PIN();
+  return makePin({ color: COLORS.clay, glyph: 'landmark', size: 42 });
 }
 
 export const STAY_PIN = () => makePin({ color: CATEGORIES['Stays/Hotel'].color, glyph: 'bed', size: 44 });

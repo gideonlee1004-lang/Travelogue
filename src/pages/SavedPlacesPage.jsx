@@ -222,15 +222,15 @@ export default function SavedPlacesPage(ctx) {
 
         {/* Google Maps suggestions */}
         <section>
-          <SectionTitle icon={Sparkles} title="Discover nearby" subtitle={`Top-rated spots in ${activeTrip.name}, from Google Maps`}
+          <SectionTitle icon={Sparkles} title="Discover nearby" subtitle={`Top-rated spots near ${activeTrip.name}`}
             action={isRecLoading ? 'Refreshing…' : 'Refresh'} onAction={fetchRecommendations} />
           <div className="flex gap-2 overflow-x-auto pb-3">
             {CATEGORY_ORDER.map(c => <Chip key={c} active={recCategory === c} icon={CATEGORIES[c].Icon} onClick={() => setRecCategory(c)}>{CATEGORIES[c].label}</Chip>)}
           </div>
           {isRecLoading ? (
-            <div className="rounded-2xl border border-dashed border-line-2 p-8 text-center text-[13px] text-ink-3 flex items-center justify-center gap-2"><RefreshCw className="w-4 h-4 animate-spin" />Finding places on Google Maps…</div>
+            <div className="rounded-2xl border border-dashed border-line-2 p-8 text-center text-[13px] text-ink-3 flex items-center justify-center gap-2"><RefreshCw className="w-4 h-4 animate-spin" />Finding places…</div>
           ) : recommendations.length === 0 ? (
-            <EmptyNote>No suggestions found. Check that the Places API (New) is enabled for your Maps key.</EmptyNote>
+            <EmptyNote>No suggestions found right now. Try another category or check again later.</EmptyNote>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               {recommendations.map((rec, i) => {

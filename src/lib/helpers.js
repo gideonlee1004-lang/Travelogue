@@ -95,7 +95,7 @@ export function formatDistance(meters) {
 }
 
 export async function fetchTravel(from, to, mode, departure) {
-  const key = `${from.lat},${from.lng}|${to.lat},${to.lng}|${mode.key}|${departure ? departure.getTime() : ''}`;
+  const key = `${from.lat},${from.lng}|${to.lat},${to.lng}|${mode.key}|${mode.key === 'TRANSIT' && departure ? departure.getTime() : ''}`;
   if (travelCache.has(key)) return travelCache.get(key);
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
@@ -111,7 +111,8 @@ export async function fetchTravel(from, to, mode, departure) {
     const body = {
       origin: { location: { latLng: { latitude: Number(from.lat), longitude: Number(from.lng) } } },
       destination: { location: { latLng: { latitude: Number(to.lat), longitude: Number(to.lng) } } },
-      travelMode: modeMap[mode.key] || 'DRIVE'
+      travelMode: modeMap[mode.key] || 'DRIVE',
+      ...(mode.key === 'DRIVE' ? { polylineQuality: 'HIGH_QUALITY' } : {})
     };
 
     if (mode.key === 'TRANSIT' && departure) {
@@ -123,7 +124,7 @@ export async function fetchTravel(from, to, mode, departure) {
       headers: {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': apiKey,
-        'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters'
+        'X-Goog-FieldMask': mode.key === 'DRIVE' ? 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline' : 'routes.duration,routes.distanceMeters'
       },
       body: JSON.stringify(body)
     });
@@ -135,7 +136,7 @@ export async function fetchTravel(from, to, mode, departure) {
     if (route) {
       const seconds = parseInt(route.duration?.replace('s', '') || '0', 10);
       const meters = route.distanceMeters || 0;
-      result = { seconds, meters };
+      result = { seconds, meters, ...(mode.key === 'DRIVE' && route.polyline?.encodedPolyline ? { encodedPolyline: route.polyline.encodedPolyline } : {}) };
     }
 
     travelCache.set(key, result);

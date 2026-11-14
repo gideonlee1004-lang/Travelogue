@@ -31,7 +31,7 @@ function FlightCard({ flight, trip, day, ctx }) {
               <p className="text-[13px] font-medium text-ink mt-0.5">{flight.departureTime || flight.time || '--:--'}{flight.estimatedDepartureTime && fmt(flight.estimatedDepartureTime) !== (flight.departureTime || '') ? <span className="text-amber-700 text-[11px] ml-1">est. {fmt(flight.estimatedDepartureTime)}</span> : null}</p>
             </div>
             <div className="flex flex-col items-center text-ink-3">
-              <span className="w-24 border-t border-dashed border-line-2 relative"><Plane className="w-4 h-4 absolute -top-2 left-1/2 -translate-x-1/2 text-[#4f6d8a] bg-paper" /></span>
+              <span className="w-8 sm:w-24 border-t border-dashed border-line-2 relative"><Plane className="w-4 h-4 absolute -top-2 left-1/2 -translate-x-1/2 text-[#4f6d8a] bg-paper" /></span>
             </div>
             <div className="text-right">
               <p className="font-serif text-[30px] leading-none text-ink">{flight.destinationCode || '—'}</p>
@@ -55,7 +55,7 @@ function FlightCard({ flight, trip, day, ctx }) {
           </div>
 
           <div className="mt-3 flex items-center gap-3 flex-wrap text-[11px] text-ink-3">
-            <span>{flight.lastChecked ? `AeroAPI checked ${new Date(flight.lastChecked).toLocaleString()}` : 'Live status not yet checked'}</span>
+            <span>{flight.lastChecked ? `Last checked ${new Date(flight.lastChecked).toLocaleString()}` : 'Live status not yet checked'}</span>
             {flight.scheduledOut && (
               <button onClick={() => ctx.refreshSavedFlight(trip.id, day, flight, true)} disabled={busy} className="inline-flex items-center gap-1 text-[#4f6d8a] font-medium disabled:opacity-50 cursor-pointer">
                 <RefreshCw className={`w-3 h-3 ${busy ? 'animate-spin' : ''}`} />Refresh
@@ -81,7 +81,7 @@ export default function FlightsPage(ctx) {
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-5 space-y-6">
-      <Hero eyebrow="Flights" title={<span className="tl-underline">Your Flights</span>} subtitle="Every booked leg across your trips, with live terminal and gate updates from FlightAware AeroAPI.">
+      <Hero eyebrow="Flights" title={<span className="tl-underline">Your Flights</span>} subtitle="Every booked leg across your trips, with live terminal and gate updates.">
         <div className="mt-4"><Btn icon={Plus} onClick={ctx.handleOpenAddFlight} disabled={!activeTrip}>Add Flight{activeTrip ? ` to ${activeTrip.name}` : ''}</Btn></div>
       </Hero>
 
@@ -92,7 +92,7 @@ export default function FlightsPage(ctx) {
       )}
 
       {flights.length === 0 ? (
-        <EmptyNote action={activeTrip ? 'Add your first flight' : undefined} onAction={ctx.handleOpenAddFlight}>No flights saved yet. Add a flight number and date and we'll pull the schedule from AeroAPI.</EmptyNote>
+        <EmptyNote action={activeTrip ? 'Add your first flight' : undefined} onAction={ctx.handleOpenAddFlight}>No flights saved yet. Add a flight number and date to look up its schedule.</EmptyNote>
       ) : (
         <>
           {activeTrip && (

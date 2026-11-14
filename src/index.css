@@ -98,3 +98,17 @@ h1, h2, h3, .font-serif { font-family: var(--font-serif); }
 
 @keyframes tl-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .tl-fade { animation: tl-fade 0.25s ease-out both; }
+
+/* Compact-screen refinements; desktop design stays unchanged. */
+html, body, #root { max-width: 100%; }
+@media (max-width: 767px) {
+  body { overflow-x: clip; }
+  .tl-card { min-width: 0; }
+  button, input, textarea, select { touch-action: manipulation; }
+  input, textarea, select { max-width: 100%; }
+  .tl-mobile-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+  .tl-mobile-full { width: 100%; }
+}
+@media (max-width: 390px) {
+  .tl-mobile-tight { gap: 0.35rem; }
+}

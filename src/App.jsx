@@ -59,7 +59,7 @@ async function apiRequest(url, options = {}) {
       headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
     });
   } catch (err) {
-    const e = new Error('Unable to connect to MongoDB Atlas. Please check your connection and try again.');
+    const e = new Error('Unable to connect to your account. Please check your connection and try again.');
     e.network = true;
     throw e;
   }
@@ -72,7 +72,7 @@ async function apiRequest(url, options = {}) {
   }
 
   if (!response.ok) {
-    const e = new Error(data?.error || `Unable to connect to MongoDB Atlas (HTTP ${response.status}).`);
+    const e = new Error((data?.error || `Unable to connect to your account (HTTP ${response.status}).`).replace(/MongoDB Atlas|AeroAPI/gi, 'service'));
     e.status = response.status;
     throw e;
   }
@@ -216,6 +216,18 @@ export default function App() {
 
   // User Authentication & Database Account State (session lives in an HttpOnly cookie)
   const [currentUser, setCurrentUser] = useState(null);
+  const [profileAvatar, setProfileAvatar] = useState(null);
+  useEffect(() => {
+    const readAvatar = () => {
+      try { setProfileAvatar(currentUser?.id ? JSON.parse(localStorage.getItem(`tl_profile_${currentUser.id}`) || '{}').avatar || null : null); }
+      catch { setProfileAvatar(null); }
+    };
+    readAvatar();
+    const update = event => { if (!event.detail?.userId || String(event.detail.userId) === String(currentUser?.id)) readAvatar(); };
+    window.addEventListener('travelogue-profile-updated', update);
+    window.addEventListener('storage', readAvatar);
+    return () => { window.removeEventListener('travelogue-profile-updated', update); window.removeEventListener('storage', readAvatar); };
+  }, [currentUser?.id]);
   const [authChecking, setAuthChecking] = useState(true);
   const [authSubmitting, setAuthSubmitting] = useState(false);
 
@@ -1176,7 +1188,7 @@ export default function App() {
       return;
     }
     if (!selected.departureTime) {
-      setFlightLookupError('AeroAPI did not return a local departure time. Please try the lookup again.');
+      setFlightLookupError('The flight service did not return a local departure time. Please try again.');
       return;
     }
 
@@ -1519,7 +1531,7 @@ export default function App() {
   if (authChecking) {
     return (
       <div className="min-h-screen bg-cream flex items-center justify-center text-xs text-ink-3">
-        Connecting to MongoDB Atlas...
+        Connecting to your account...
       </div>
     );
   }
@@ -1621,7 +1633,7 @@ export default function App() {
       <div className="min-h-screen bg-cream text-ink flex flex-col justify-center items-center px-4 font-sans">
         <div className="w-full max-w-md bg-paper border border-red-200 rounded-2xl p-6 space-y-4 shadow-sm text-center">
           <AlertTriangle className="w-8 h-8 mx-auto text-red-500" />
-          <h2 className="font-serif text-xl">Unable to connect to MongoDB Atlas</h2>
+          <h2 className="font-serif text-xl">Unable to connect to your account</h2>
           <p className="text-xs text-ink-2 break-words">{dbError}</p>
           <div className="flex items-center justify-center space-x-2 text-xs">
             <button
@@ -1660,9 +1672,9 @@ export default function App() {
   const notificationCount = (collabConflict ? 1 : 0) + (dbError ? 1 : 0) + Object.values(flightRefreshErrors).filter(Boolean).length;
 
   return (
-    <div className="min-h-screen bg-cream text-ink flex flex-col font-sans">
+    <div className="min-h-screen bg-cream text-ink flex flex-col font-sans pb-[calc(70px+env(safe-area-inset-bottom))] lg:pb-0 overflow-x-clip">
       <style>{PLACE_AUTOCOMPLETE_CSS}</style>
-      <TopNav page={page} onNavigate={navigate} user={currentUser} notifications={notificationCount}
+      <TopNav page={page} onNavigate={navigate} user={currentUser} avatar={profileAvatar} notifications={notificationCount}
         onBell={() => navigate('flights')} onAvatar={() => navigate('profile')} />
 
       {dbError && (
@@ -1688,7 +1700,7 @@ export default function App() {
 
       <footer className="max-w-[1400px] mx-auto w-full px-6 py-6 text-[11px] text-ink-3 flex items-center justify-between">
         <span className="flex items-center gap-2"><BrandMark className="w-5 h-5" /> Travelogue · by Li Ze Ying</span>
-        <span className="flex items-center gap-1.5"><Database className={`w-3.5 h-3.5 ${dbError ? 'text-red-500' : isDbSyncing ? 'text-amber-500 animate-spin' : 'text-sage'}`} />{dbError ? 'Sync error' : isDbSyncing ? 'Syncing…' : 'Synced to MongoDB Atlas'}</span>
+        <span className="flex items-center gap-1.5"><Database className={`w-3.5 h-3.5 ${dbError ? 'text-red-500' : isDbSyncing ? 'text-amber-500 animate-spin' : 'text-sage'}`} />{dbError ? 'Sync error' : isDbSyncing ? 'Syncing…' : 'Synced'}</span>
       </footer>
 
       {/* Invitation link: guests join using their own signed-in account. */}
@@ -2226,7 +2238,7 @@ export default function App() {
               <button type="submit" disabled={flightLookupBusy}
                 className="w-full flex justify-center items-center gap-2 rounded-full bg-sky-700 text-white text-xs font-semibold py-2.5 disabled:opacity-50 cursor-pointer">
                 {flightLookupBusy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-                {flightLookupBusy ? 'Searching AeroAPI…' : 'Find scheduled flight'}
+                {flightLookupBusy ? 'Searching flights…' : 'Find scheduled flight'}
               </button>
             </form>
 
@@ -2314,7 +2326,7 @@ export default function App() {
                 <label className={LABEL}>Search Location</label>
                 {isLoaded ? (
                   <PlaceAutocomplete
-                    placeholder="Search place on Google Maps..."
+                    placeholder="Search for a place..."
                     onPlaceSelected={handleCustomPlaceSelected}
                   />
                 ) : (

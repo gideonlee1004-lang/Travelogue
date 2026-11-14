@@ -126,7 +126,7 @@ export default function OverviewPage(ctx) {
                 <span className="w-8 h-8 rounded-full border border-line flex items-center justify-center text-ink-2 group-hover:bg-cream-2"><ChevronRight className="w-4 h-4" /></span>
               </button>
               <p className="text-[13px] text-ink-2 flex items-center gap-1.5 mt-2"><CalendarDays className="w-4 h-4" />{formatRange(activeTrip.startDate, activeTrip.daysCount)} <span className="mx-1">·</span> {activeTrip.daysCount} day{activeTrip.daysCount === 1 ? '' : 's'}</p>
-              <div className="grid grid-cols-4 mt-5 divide-x divide-line">
+              <div className="grid grid-cols-2 sm:grid-cols-4 mt-5 gap-y-4 sm:gap-y-0 sm:divide-x divide-line">
                 {[
                   { Icon: MapPin, v: stats.cities, l: 'Cities' },
                   { Icon: BedDouble, v: stats.distinctStays || stats.stays, l: 'Stays' },

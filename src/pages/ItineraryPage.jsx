@@ -9,8 +9,8 @@ import { PlacePhoto, CoverImage } from '../components/PlacePhoto.jsx';
 import { TripMap } from '../components/TripMap.jsx';
 import { categoryMeta, COLORS, cityOf } from '../theme.js';
 import {
-  formatRange, formatDayDate, getDayDateString, getDepartureDate, checkIsClosed, useLegTravel, pickLeg, formatDuration, formatDistance,
-  getGroupedStays, haversineKm, addMinutes, sortStopsByTime
+  formatRange, formatDayDate, getDayDateString, getDepartureDate, checkIsClosed, useLegTravel, formatDuration,
+  getGroupedStays, haversineKm, addMinutes, sortStopsByTime, TRAVEL_MODES
 } from '../lib/helpers.js';
 
 const TABS = [
@@ -46,23 +46,27 @@ function dayTitle(trip, day) {
   return `${city} Discovery`;
 }
 
-/* --- Leg between two stops: travel estimate row --- */
+/* --- Compare all three travel options; never silently pick a mode. --- */
 function LegRow({ from, to, departure, onLeg, index }) {
   const { loading, data } = useLegTravel(from, to, departure);
-  const leg = pickLeg(data);
-  useEffect(() => { if (!loading) onLeg?.(index, leg); }, [loading, leg?.seconds, leg?.meters]); // eslint-disable-line
-  const Icon = leg?.mode?.Icon || Footprints;
-  const label = leg?.mode?.label === 'Transit' ? 'Train / Bus' : leg?.mode?.label || 'Walk';
-  const url = `https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lng}&destination=${to.lat},${to.lng}`;
+  useEffect(() => { if (!loading) onLeg?.(index, data); }, [loading, data?.WALK?.seconds, data?.TRANSIT?.seconds, data?.DRIVE?.seconds]); // eslint-disable-line
   return (
-    <div className="flex items-center gap-3 pl-[62px] pr-2 py-1">
-      <a href={url} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center gap-3 h-9 px-3 rounded-full bg-cream-2 border border-line text-[12px] text-ink-2 hover:bg-sage-soft/60">
-        <Icon className="w-4 h-4 text-ink-2" strokeWidth={1.8} />
-        <span className="font-medium text-ink">{label}</span>
-        <span className="text-ink-3">{loading ? '…' : leg ? `~ ${formatDuration(leg.seconds)}` : 'n/a'}</span>
-        {leg?.meters != null && <span className="text-ink-3">· {formatDistance(leg.meters)}</span>}
-        {!loading && data?.WALK && leg?.mode?.key !== 'WALK' && <span className="hidden sm:inline text-ink-3 ml-auto">walk {formatDuration(data.WALK.seconds)}</span>}
-      </a>
+    <div className="pl-[62px] pr-0 sm:pr-2 py-1 min-w-0">
+      <div className="grid grid-cols-3 gap-1 sm:gap-2">
+        {TRAVEL_MODES.map(mode => {
+          const info = data?.[mode.key];
+          const travelmode = { WALK: 'walking', TRANSIT: 'transit', DRIVE: 'driving' }[mode.key];
+          const url = `https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lng}&destination=${to.lat},${to.lng}&travelmode=${travelmode}`;
+          return (
+            <a key={mode.key} href={url} target="_blank" rel="noopener noreferrer" title={`${mode.label}: ${loading ? 'Loading' : info ? formatDuration(info.seconds) : 'Unavailable'}`}
+              className="min-w-0 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 rounded-xl bg-cream-2 border border-line px-1 sm:px-2 py-1.5 text-[11px] text-ink-2 hover:bg-sage-soft/70">
+              <mode.Icon className="w-3.5 h-3.5 text-sage-deep shrink-0" strokeWidth={1.8} />
+              <span className="font-medium text-ink">{mode.key === 'DRIVE' ? 'Drive' : mode.label}</span>
+              <span className="whitespace-nowrap text-ink-3">{loading ? '…' : info ? formatDuration(info.seconds) : '—'}</span>
+            </a>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -84,11 +88,11 @@ function StopCard({ stop, index, trip, day, ctx, isFirst, isLast, onMenu, menuOp
       <div className="relative shrink-0 w-4 flex justify-center pt-4">
         <span className={`w-3.5 h-3.5 rounded-full border-2 ${stop.isFlight ? 'bg-[#4f6d8a] border-[#4f6d8a]' : isLast ? 'bg-sage-deep border-sage-deep' : 'bg-paper border-sage-deep'}`} />
       </div>
-      <div className={`flex-1 min-w-0 tl-card p-2.5 flex items-center gap-3 ${closed ? 'border-red-200 bg-red-50/40' : ''} ${stop.isFlight ? 'bg-sky-soft/40' : ''}`}>
+      <div className={`flex-1 min-w-0 tl-card p-2 sm:p-2.5 flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 ${closed ? 'border-red-200 bg-red-50/40' : ''} ${stop.isFlight ? 'bg-sky-soft/40' : ''}`}>
         {stop.isFlight ? (
-          <span className="w-[72px] h-14 rounded-lg bg-sky-soft flex items-center justify-center text-[#4f6d8a] shrink-0"><Plane className="w-6 h-6" /></span>
+          <span className="w-12 sm:w-[72px] h-12 sm:h-14 rounded-lg bg-sky-soft flex items-center justify-center text-[#4f6d8a] shrink-0"><Plane className="w-6 h-6" /></span>
         ) : (
-          <PlacePhoto place={stop} className="w-[72px] h-14 shrink-0" rounded="rounded-lg" />
+          <PlacePhoto place={stop} className="w-12 sm:w-[72px] h-12 sm:h-14 shrink-0" rounded="rounded-lg" />
         )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
@@ -129,18 +133,22 @@ function StopCard({ stop, index, trip, day, ctx, isFirst, isLast, onMenu, menuOp
             </p>
           )}
         </div>
-        <button onClick={() => ctx.handleOpenInGoogleMaps(stop)} className="w-8 h-8 rounded-full border border-line flex items-center justify-center text-ink-2 hover:bg-cream-2 shrink-0 cursor-pointer" title="Open in Google Maps"><ArrowUpRight className="w-4 h-4" /></button>
-        <div className="relative shrink-0">
-          <button onClick={() => onMenu(menuOpen ? null : stop.id)} className="w-8 h-8 rounded-full flex items-center justify-center text-ink-3 hover:bg-cream-2 cursor-pointer"><MoreHorizontal className="w-4 h-4" /></button>
-          {menuOpen && (
-            <div className="absolute right-0 top-9 z-20 w-44 tl-card p-1 text-[13px] tl-fade">
-              {!stop.isFlight && <button onClick={() => { onMenu(null); ctx.handleOpenEditStopModal(stop); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-cream-2 cursor-pointer"><Pen className="w-3.5 h-3.5" />Edit</button>}
-              <button disabled={isFirst} onClick={() => { onMenu(null); ctx.handleMoveStop(day, index, -1); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-cream-2 disabled:opacity-40 cursor-pointer"><ArrowUp className="w-3.5 h-3.5" />Move up</button>
-              <button disabled={isLast} onClick={() => { onMenu(null); ctx.handleMoveStop(day, index, 1); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-cream-2 disabled:opacity-40 cursor-pointer"><ArrowDown className="w-3.5 h-3.5" />Move down</button>
-              {stop.lat != null && <button onClick={() => { onMenu(null); ctx.handleOpenInYahooCarNavi(stop); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-cream-2 cursor-pointer"><Car className="w-3.5 h-3.5" />Yahoo! カーナビ</button>}
-              <button onClick={() => { onMenu(null); ctx.handleRemoveStop(day, index); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-red-600 hover:bg-red-50 cursor-pointer"><Trash2 className="w-3.5 h-3.5" />Remove</button>
-            </div>
+        <div className="flex items-center gap-1 sm:gap-1.5 w-full sm:w-auto justify-end sm:justify-start shrink-0">
+          <button onClick={() => ctx.handleOpenInGoogleMaps(stop)} className="h-8 px-2 rounded-full border border-line flex items-center justify-center gap-1 text-[11px] text-ink-2 hover:bg-cream-2 shrink-0 cursor-pointer" title="Open in Google Maps"><ArrowUpRight className="w-4 h-4" /><span className="sm:hidden">Maps</span></button>
+          {!stop.isFlight && stop.lat != null && stop.lng != null && (
+            <button onClick={() => ctx.handleOpenInYahooCarNavi(stop)} className="h-8 px-2 rounded-full border border-sage/30 bg-sage-soft/70 flex items-center justify-center gap-1 text-[11px] font-medium text-sage-deep hover:bg-sage-soft shrink-0 cursor-pointer" title="Open Yahoo! Car Navi"><Car className="w-3.5 h-3.5" />Yahoo! Navi</button>
           )}
+          <div className="relative shrink-0">
+            <button onClick={() => onMenu(menuOpen ? null : stop.id)} className="w-8 h-8 rounded-full flex items-center justify-center text-ink-3 hover:bg-cream-2 cursor-pointer" aria-label={`More options for ${stop.name}`}><MoreHorizontal className="w-4 h-4" /></button>
+            {menuOpen && (
+              <div className="absolute right-0 top-9 z-20 w-44 tl-card p-1 text-[13px] tl-fade">
+                {!stop.isFlight && <button onClick={() => { onMenu(null); ctx.handleOpenEditStopModal(stop); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-cream-2 cursor-pointer"><Pen className="w-3.5 h-3.5" />Edit</button>}
+                <button disabled={isFirst} onClick={() => { onMenu(null); ctx.handleMoveStop(day, index, -1); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-cream-2 disabled:opacity-40 cursor-pointer"><ArrowUp className="w-3.5 h-3.5" />Move up</button>
+                <button disabled={isLast} onClick={() => { onMenu(null); ctx.handleMoveStop(day, index, 1); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-cream-2 disabled:opacity-40 cursor-pointer"><ArrowDown className="w-3.5 h-3.5" />Move down</button>
+                <button onClick={() => { onMenu(null); ctx.handleRemoveStop(day, index); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-red-600 hover:bg-red-50 cursor-pointer"><Trash2 className="w-3.5 h-3.5" />Remove</button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -203,8 +211,17 @@ export default function ItineraryPage(ctx) {
 
   const onLeg = (i, leg) => { legsRef.current = { ...legsRef.current, [i]: leg }; setLegs(legsRef.current); };
   const legList = Object.values(legs).filter(Boolean);
-  const totalKm = legList.reduce((s, l) => s + (l.meters || 0), 0) / 1000;
-  const transportMin = legList.reduce((s, l) => s + (l.seconds || 0), 0) / 60;
+  const expectedLegCount = dayStops.slice(1).filter((stop, i) => {
+    const prev = dayStops[i];
+    return !stop.isFlight && !prev.isFlight && prev.lat != null && prev.lng != null && stop.lat != null && stop.lng != null;
+  }).length;
+  const allLegsReady = expectedLegCount > 0 && legList.length === expectedLegCount;
+  const totalKm = legList.reduce((s, l) => s + (l.DRIVE?.meters || 0), 0) / 1000;
+  const travelTotals = TRAVEL_MODES.map(mode => ({
+    ...mode,
+    seconds: allLegsReady && legList.every(leg => leg[mode.key]?.seconds != null)
+      ? legList.reduce((sum, leg) => sum + leg[mode.key].seconds, 0) : null
+  }));
   const activityMin = dayStops.filter(s => !s.isFlight).reduce((s, st) => s + (st.duration || 60), 0);
 
   const flowItems = [
@@ -238,14 +255,14 @@ export default function ItineraryPage(ctx) {
 
   const tabBar = (
     <Card className="p-2 flex flex-col lg:flex-row lg:items-center gap-2">
-      <div className="flex gap-1 overflow-x-auto">
+      <div className="flex gap-1 overflow-x-auto min-w-0 tl-mobile-scroll">
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} className={`flex items-center gap-2 h-10 px-4 rounded-full text-[14px] whitespace-nowrap cursor-pointer ${tab === t.key ? 'bg-sage-soft text-ink font-medium' : 'text-ink-2 hover:bg-cream-2'}`}>
             <t.Icon className="w-4 h-4" strokeWidth={1.8} />{t.label}
           </button>
         ))}
       </div>
-      <div className="lg:ml-auto flex gap-2 flex-wrap">
+      <div className="lg:ml-auto flex gap-2 flex-wrap min-w-0">
         <Btn variant="outline" icon={Sparkles} onClick={() => ctx.optimizeDay(day)} title="Reorder today's stops by shortest path">Optimize Route</Btn>
         <Btn variant="outline" icon={Wand2} onClick={() => ctx.autoPlanDay(day)} title="Fill today with unscheduled saved places">Auto Plan</Btn>
         <Btn icon={Plus} onClick={ctx.handleAddDay}>Add Day</Btn>
@@ -258,12 +275,12 @@ export default function ItineraryPage(ctx) {
       <div className="flex items-center justify-between px-1 mb-2">
         <h3 className="font-serif text-[18px] text-ink">Trip Plan <span className="text-[13px] text-ink-3 font-sans">({trip.daysCount} Days)</span></h3>
       </div>
-      <div className="space-y-1.5 max-h-[60vh] overflow-y-auto pr-0.5">
+      <div className="flex lg:block gap-2 lg:space-y-1.5 lg:max-h-[60vh] overflow-x-auto lg:overflow-y-auto pb-2 lg:pb-0 pr-0.5 tl-mobile-scroll">
         {days.map(d => {
           const active = d === day;
           return (
             <button key={d} onClick={() => { setActiveDay(d); setTab(tab === 'plan' ? 'plan' : tab); }}
-              className={`w-full flex items-center gap-3 p-2 rounded-xl border text-left cursor-pointer transition-colors ${active ? 'bg-sage-soft border-sage/30' : 'bg-paper border-line hover:bg-cream-2'}`}>
+              className={`w-[200px] lg:w-full shrink-0 flex items-center gap-3 p-2 rounded-xl border text-left cursor-pointer transition-colors ${active ? 'bg-sage-soft border-sage/30' : 'bg-paper border-line hover:bg-cream-2'}`}>
               <span className={`h-9 px-2.5 rounded-lg flex items-center text-[13px] font-medium shrink-0 ${active ? 'bg-sage-deep text-white' : 'bg-cream-2 text-ink'}`}>Day {d}</span>
               <span className="min-w-0 flex-1">
                 <span className="block text-[11px] text-ink-3">{formatDayDate(trip.startDate, d)}</span>
@@ -284,10 +301,10 @@ export default function ItineraryPage(ctx) {
       <div className="flex items-center gap-3 flex-wrap">
         <span className="h-11 px-4 rounded-full bg-sage-soft font-serif text-[22px] text-ink flex items-center">Day {day}</span>
         <div className="min-w-0 flex-1">
-          <h2 className="font-serif text-[24px] leading-tight text-ink truncate">{dayTitle(trip, day)}</h2>
+          <h2 className="font-serif text-[20px] sm:text-[24px] leading-tight text-ink break-words">{dayTitle(trip, day)}</h2>
           <p className="text-[12px] text-ink-3">{formatDayDate(trip.startDate, day)} <span className="mx-1">•</span> {dayStops.map(cityOf).find(Boolean) || trip.japaneseSub}</p>
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 shrink-0">
           <button disabled={day <= 1} onClick={() => setActiveDay(day - 1)} className="w-9 h-9 rounded-full border border-line flex items-center justify-center text-ink-2 hover:bg-cream-2 disabled:opacity-40 cursor-pointer"><ChevronLeft className="w-4 h-4" /></button>
           <button disabled={day >= trip.daysCount} onClick={() => setActiveDay(day + 1)} className="w-9 h-9 rounded-full border border-line flex items-center justify-center text-ink-2 hover:bg-cream-2 disabled:opacity-40 cursor-pointer"><ChevronRight className="w-4 h-4" /></button>
         </div>
@@ -333,7 +350,7 @@ export default function ItineraryPage(ctx) {
         <h3 className="font-serif text-[18px] text-ink mb-3">Day {day} Route</h3>
         <TripMap isLoaded={isLoaded} loadError={loadError} className="h-56 rounded-xl border border-line"
           center={trip.center ? { lat: trip.center[0], lng: trip.center[1] } : undefined} zoom={trip.zoom || 11}
-          stops={dayStops} stays={stay ? [stay] : []} fitKey={`day_${trip.id}_${day}`} onExpand={() => setTab('route')} />
+          stops={dayStops} stays={stay ? [stay] : []} roadRouting routeGroups={[[...dayStops, ...(stay ? [stay] : [])]]} fitKey={`day_${trip.id}_${day}`} onExpand={() => setTab('route')} />
         <h4 className="text-[14px] font-medium text-ink mt-4 mb-2">Route Flow <span className="text-ink-3 font-normal">(Day {day})</span></h4>
         {flowItems.length === 0 ? <p className="text-[12px] text-ink-3">Add stops to see the flow.</p> : (
           <div className="flex items-start gap-1 overflow-x-auto pb-1">
@@ -360,12 +377,12 @@ export default function ItineraryPage(ctx) {
 
       <Card className="p-4">
         <h3 className="font-serif text-[18px] text-ink mb-3">Day {day} At a Glance</h3>
-        <div className="grid grid-cols-4 divide-x divide-line">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-3 sm:gap-y-0 sm:divide-x divide-line">
           {[
             { Icon: MapPin, v: dayStops.length, l: 'Stops' },
-            { Icon: Ruler, v: totalKm ? `~ ${totalKm.toFixed(1)} km` : '–', l: 'Total Distance' },
+            { Icon: Ruler, v: totalKm ? `~ ${totalKm.toFixed(1)} km` : '–', l: 'Road Distance' },
             { Icon: Clock, v: activityMin ? `~ ${formatDuration(activityMin * 60)}` : '–', l: 'Activities' },
-            { Icon: Bus, v: transportMin ? `~ ${formatDuration(transportMin * 60)}` : '–', l: 'Transport' }
+            { Icon: Bus, v: expectedLegCount ? '3 modes' : '–', l: 'Travel Options' }
           ].map(s => (
             <div key={s.l} className="flex flex-col items-center text-center px-1">
               <s.Icon className="w-4 h-4 text-clay mb-1" strokeWidth={1.8} />
@@ -374,6 +391,17 @@ export default function ItineraryPage(ctx) {
             </div>
           ))}
         </div>
+        {expectedLegCount > 0 && (
+          <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-line">
+            {travelTotals.map(mode => (
+              <div key={mode.key} className="flex flex-col sm:flex-row items-center justify-center gap-1 text-[11px] text-ink-2 text-center">
+                <mode.Icon className="w-3.5 h-3.5 text-sage-deep shrink-0" />
+                <span>{mode.key === 'DRIVE' ? 'Drive' : mode.label}:</span>
+                <span className="font-semibold text-ink">{!allLegsReady ? '…' : mode.seconds != null ? formatDuration(mode.seconds) : '—'}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
     </div>
   );
@@ -384,7 +412,8 @@ export default function ItineraryPage(ctx) {
       <h2 className="font-serif text-[24px] text-ink">Whole-trip route</h2>
       <TripMap isLoaded={isLoaded} loadError={loadError} className="h-[380px] rounded-xl border border-line"
         center={trip.center ? { lat: trip.center[0], lng: trip.center[1] } : undefined} zoom={trip.zoom || 11}
-        stops={days.flatMap(d => sortStopsByTime(trip.schedule?.[d] || []))} stays={Object.values(trip.staysByDay || {})} places={trip.savedPlaces || []} fitKey={`route_${trip.id}`} />
+        stops={days.flatMap(d => sortStopsByTime(trip.schedule?.[d] || []))} stays={Object.values(trip.staysByDay || {})} places={trip.savedPlaces || []}
+        roadRouting routeGroups={days.map(d => [...sortStopsByTime(trip.schedule?.[d] || []), ...(trip.staysByDay?.[d] ? [trip.staysByDay[d]] : [])])} fitKey={`route_${trip.id}`} />
       <div className="space-y-3">
         {days.map(d => {
           const stops = sortStopsByTime(trip.schedule?.[d] || []);
