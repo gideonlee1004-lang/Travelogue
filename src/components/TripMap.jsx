@@ -82,13 +82,14 @@ export function TripMap({
   const recenter = () => { lastFit.current = ''; setMap(m => m); if (map && points.length) { const b = new window.google.maps.LatLngBounds(); points.forEach(p => b.extend(p)); points.length > 1 ? map.fitBounds(b, { top: padding, right: padding, bottom: padding, left: padding }) : (map.panTo(points[0]), map.setZoom(14)); } };
 
   return (
-    <div className={`relative overflow-hidden bg-[#f1ead9] ${className}`}>
+    <div className={`${/\babsolute\b/.test(className) ? '' : 'relative'} overflow-hidden bg-[#f1ead9] ${className}`} style={{ minHeight: 160 }}>
       {loadError ? (
         <div className="absolute inset-0 flex items-center justify-center text-xs text-red-600 p-4">Google Maps failed to load.</div>
       ) : !isLoaded ? (
         <div className="absolute inset-0 flex items-center justify-center text-xs text-ink-3">Loading map…</div>
       ) : (
-        <GoogleMap mapContainerStyle={CONTAINER} center={center} zoom={zoom} options={MAP_OPTIONS} onLoad={onLoad} onUnmount={onUnmount}>
+        <div className="absolute inset-0">
+        <GoogleMap mapContainerStyle={CONTAINER} center={center || { lat: 35.68, lng: 139.76 }} zoom={zoom} options={MAP_OPTIONS} onLoad={onLoad} onUnmount={onUnmount}>
           {routeLine && (
             <PolylineF path={routeLine} options={{
               strokeOpacity: 0, strokeWeight: 3,
@@ -129,6 +130,7 @@ export function TripMap({
             <MarkerF key={s.id || `stay_${i}`} position={ll(s)} icon={STAY_PIN()} title={`Stay: ${s.name}`} zIndex={25} />
           ) : null)}
         </GoogleMap>
+        </div>
       )}
 
       {controls && isLoaded && !loadError && (
