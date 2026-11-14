@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Plus, Trash2, Sparkles, Search, ArrowUp, ArrowDown, Globe, ExternalLink, BookmarkPlus, Check, RefreshCw, AlertTriangle, Star, Layers, Footprints, Car, Bus, Plane, Hotel, Pin, Pen, User, LogOut, Lock, Mail, Database, CheckCircle2, Calendar, Users, Link2, Copy, UserMinus, X, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Sparkles, Search, ArrowUp, ArrowDown, Globe, ExternalLink, BookmarkPlus, Check, RefreshCw, AlertTriangle, Star, Layers, Footprints, Car, Bus, Plane, Hotel, Pin, Pen, User, LogOut, Lock, Mail, Database, CheckCircle2, Calendar, Users, Link2, Copy, UserMinus, X, ChevronDown, House, MapPin, Compass, Utensils, BookOpen, Route, BedDouble, Settings, MapPinned, List, ArrowRight, ArrowUpRight, Clock3, Map as MapIcon, Pencil, CheckCircle, Navigation, Coffee, Leaf, Image as ImageIcon, CalendarDays, Send, ChevronRight, ShieldCheck, Bell, Globe2, Heart, Eye, ChevronLeft } from 'lucide-react';
 import { GoogleMap, useJsApiLoader, MarkerF, PolylineF } from '@react-google-maps/api';
 import { mergeTrip } from '../api/_merge.js';
 
@@ -125,35 +125,34 @@ const pollUserItineraries = knownVersions => apiRequest('/api/trips', {
   method: 'POST', body: JSON.stringify({ action: 'poll', knownVersions })
 });
 
-// Map pins
-const BLUE_SAVED_PLACE_PIN = {
-  url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="30" height="38" viewBox="0 0 24 24" fill="#7e9987" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-      <circle cx="12" cy="10" r="3.5" fill="#ffffff"></circle>
-    </svg>
-  `),
-  anchor: { x: 15, y: 38 }
+// Soft custom map pins, each anchored at its point of interest.
+// Data is unchanged; markers still use Google Maps coordinates and titles.
+function editorialPin(fill, symbol = '•') {
+  const safeSymbol = symbol === '✦' ? '✦' : '•';
+  return {
+    url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="44" height="55" viewBox="0 0 44 55"><path d="M22 2C10.7 2 2 10.7 2 22c0 15 20 30 20 30S42 37 42 22C42 10.7 33.3 2 22 2Z" fill="${fill}" stroke="#fffaf3" stroke-width="2.8"/><circle cx="22" cy="21" r="11" fill="#fffaf3" opacity=".96"/><text x="22" y="26" font-size="17" font-family="Arial" text-anchor="middle" fill="${fill}">${safeSymbol}</text></svg>`),
+    scaledSize: { width: 39, height: 49 },
+    anchor: { x: 19.5, y: 47 },
+    labelOrigin: { x: 19.5, y: 18.5 }
+  };
+}
+const BLUE_SAVED_PLACE_PIN = editorialPin('#728b76', '✦');
+const SAVED_PIN_VARIANTS = {
+  'Places to Visit': BLUE_SAVED_PLACE_PIN,
+  'Food & Eats': editorialPin('#ba815a','✦'),
+  'Experiences': editorialPin('#869665','✦'),
+  'Stays/Hotel': editorialPin('#a18c71','✦'),
+  'Flights': editorialPin('#668d9a','✦')
 };
-
-const DARK_ITINERARY_PIN = {
-  url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="30" height="38" viewBox="0 0 24 24" fill="#273c32" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-      <circle cx="12" cy="10" r="3.5" fill="#ffffff"></circle>
-    </svg>
-  `),
-  anchor: { x: 15, y: 38 }
-};
-
-const STAY_HOTEL_PIN = {
-  url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="34" height="42" viewBox="0 0 24 24" fill="#bc9b6b" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-      <circle cx="12" cy="10" r="4" fill="#ffffff"></circle>
-    </svg>
-  `),
-  anchor: { x: 17, y: 42 }
+const getSavedPin = category => SAVED_PIN_VARIANTS[category] || BLUE_SAVED_PLACE_PIN;
+const DARK_ITINERARY_PIN = editorialPin('#bb714c');
+const STAY_HOTEL_PIN = editorialPin('#a38b66');
+const getCategoryIcon = (category) => {
+  if (category === 'Food & Eats') return Utensils;
+  if (category === 'Stays/Hotel') return BedDouble;
+  if (category === 'Flights') return Plane;
+  if (category === 'Experiences') return Compass;
+  return MapPin;
 };
 
 // Calculate quadratic curved points for flight path arc
@@ -802,6 +801,18 @@ export default function App() {
 
   const [activeTripId, setActiveTripId] = useState(null);
   const [activeDay, setActiveDay] = useState(null);
+  const [screen, setScreen] = useState('overview');
+  const [placeDisplay, setPlaceDisplay] = useState('map');
+  const [profileEditing, setProfileEditing] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileNotice, setProfileNotice] = useState('');
+  const [profileDraft, setProfileDraft] = useState({ name: '', bio: '', homeBase: '', avatarUrl: '', travelStyle: 'Thoughtful explorer', interests: 'Nature, local food, culture' });
+  const goTo = (destination, day = undefined) => {
+    setScreen(destination);
+    if (destination === 'places' || destination === 'overview') setActiveDay(null);
+    else if (day !== undefined) setActiveDay(day);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
   const [filterCategory, setFilterCategory] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -907,6 +918,36 @@ export default function App() {
   }, [trips, activeTripId]);
 
   const activeTrip = trips.find(t => t.id === activeTripId) || null;
+  const profile = currentUser?.profile || {};
+  const userInitials = (currentUser?.name || 'T').trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+  const flightsByDay = activeTrip ? Object.entries(activeTrip.schedule || {}).flatMap(([day, stops]) =>
+    (stops || []).filter(stop => stop.isFlight).map(flight => ({ day: Number(day), flight })))
+    .sort((a,b) => String(a.flight.scheduledOut || a.flight.flightDate || '').localeCompare(String(b.flight.scheduledOut || b.flight.flightDate || ''))) : [];
+  const allSavedCount = trips.reduce((sum, trip) => sum + (trip.savedPlaces?.length || 0), 0);
+  const totalFlightCount = trips.reduce((sum, trip) => sum + Object.values(trip.schedule || {}).flat().filter(item => item.isFlight).length, 0);
+  const tripStays = activeTrip ? getGroupedStays(activeTrip.staysByDay || {}, activeTrip.daysCount) : [];
+
+  const openProfileEditor = () => {
+    setProfileDraft({
+      name: currentUser?.name || '', bio: profile.bio || '', homeBase: profile.homeBase || '',
+      avatarUrl: profile.avatarUrl || '', travelStyle: profile.travelStyle || 'Thoughtful explorer',
+      interests: profile.interests || 'Nature, local food, culture'
+    });
+    setProfileNotice('');
+    setProfileEditing(true);
+  };
+  const handleProfileSave = async (event) => {
+    event.preventDefault();
+    setProfileSaving(true);
+    setProfileNotice('');
+    try {
+      const updated = await authApi({ action: 'updateProfile', ...profileDraft });
+      setCurrentUser(updated.user);
+      setProfileEditing(false);
+      setProfileNotice('Your profile has been updated.');
+    } catch (error) { setProfileNotice(error.message); }
+    finally { setProfileSaving(false); }
+  };
 
   const activeTripName = activeTrip?.name;
   const activeTripLat = activeTrip?.center?.[0];
@@ -1321,6 +1362,7 @@ export default function App() {
     setTrips(prev => [...prev, newTrip]);
     setActiveTripId(newTrip.id);
     setActiveDay(null);
+    setScreen('overview');
     setShowNewTripModal(false);
     setNewTripForm({ name: '', subName: '', startDate: '', endDate: '', lat: 48.8566, lng: 2.3522 });
   };
@@ -1448,6 +1490,7 @@ export default function App() {
         };
       })
     );
+    goTo('itinerary', day);
   };
 
   const handleAddDirectStop = async (e) => {
@@ -1841,11 +1884,7 @@ export default function App() {
       <div className="zen-auth min-h-screen bg-[#f6f5f0] text-[#273c32] flex flex-col justify-center items-center px-4 py-8 sm:py-12 font-sans relative">
         <div className="zen-auth-card w-full max-w-md bg-white border border-[#e5e1d7] rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
           <div className="zen-auth-heading text-center space-y-2">
-            <img
-              src="/travelogue-logo.png"
-              alt="Travelogue Logo"
-              className="w-14 h-14 sm:w-16 sm:h-16 object-contain mx-auto mb-1"
-            />
+            <div className="zen-auth-mark" aria-hidden="true">t<span>.</span></div>
             <div className="zen-eyebrow">THE ART OF GOING SOMEWHERE</div>
             <h1 className="font-serif text-2xl sm:text-3xl font-medium tracking-tight">The journey is yours.</h1>
             <p className="text-xs text-[#899489] tracking-wide">Welcome back to Travelogue</p>
@@ -2009,6 +2048,20 @@ export default function App() {
             </div>
           </div>
 
+          {/* Five independent destinations: each surface has its own task and layout. */}
+          <nav className="zen-global-nav" aria-label="Primary navigation">
+            {[
+              ['overview', House, 'Overview'], ['places', BookmarkPlus, 'Saved Places'],
+              ['itinerary', CalendarDays, 'Itinerary'], ['flights', Plane, 'Flights'],
+              ['profile', User, 'Profile']
+            ].map(([key, Icon, label]) => (
+              <button key={key} type="button" onClick={() => goTo(key, key === 'itinerary' ? 1 : undefined)}
+                aria-current={screen === key ? 'page' : undefined} className={`zen-nav-item ${screen === key ? 'zen-nav-active' : ''}`}>
+                <Icon size={17} strokeWidth={1.8} /> <span>{label}</span>
+              </button>
+            ))}
+          </nav>
+
           {/* User Account & Database Status Bar */}
           <div className="flex items-center space-x-2 sm:space-x-4 ml-auto shrink-0 min-w-0 order-2 sm:order-3">
             <div className="zen-sync hidden md:flex items-center space-x-1.5 text-[11px] text-[#67766b] bg-[#f0eee7] px-2.5 py-1 rounded border border-[#e5e1d7]">
@@ -2020,12 +2073,12 @@ export default function App() {
             </div>
 
             <div className="flex items-center space-x-1 sm:space-x-3 min-w-0">
-              <div className="flex items-center space-x-1.5 sm:space-x-2 bg-white border border-[#e5e1d7] rounded px-2 sm:px-2.5 py-1 min-w-0">
+              <button type="button" onClick={() => goTo('profile')} title="Open your profile" className="zen-account-button flex items-center space-x-1.5 sm:space-x-2 bg-white border border-[#e5e1d7] rounded px-2 sm:px-2.5 py-1 min-w-0">
                 <div className="w-5 h-5 rounded-full bg-[#273c32] text-white flex items-center justify-center text-[10px] font-bold shrink-0">
                   {currentUser.name ? currentUser.name[0].toUpperCase() : 'U'}
                 </div>
                 <span className="text-xs font-medium text-[#273c32] max-w-[72px] sm:max-w-[120px] truncate">{currentUser.name}</span>
-              </div>
+              </button>
               <button
                 onClick={handleLogout}
                 className="p-2 sm:p-1.5 text-[#67766b] hover:text-red-600 hover:bg-red-50 rounded transition-all cursor-pointer shrink-0"
@@ -2088,8 +2141,46 @@ export default function App() {
         </div>
       )}
 
-      {/* Main */}
-      {!activeTrip ? (
+      {/* Main destinations */}
+      {screen === 'profile' ? (
+        <main className="zen-page zen-profile-page" aria-label="Profile and account">
+          <section className="zen-page-banner zen-profile-banner"><div className="zen-landscape" aria-hidden="true" />
+            <div className="zen-profile-banner-body">
+              <div className="zen-avatar-xl">{profile.avatarUrl ? <img src={profile.avatarUrl} alt="Your avatar" referrerPolicy="no-referrer" onError={e => { e.currentTarget.style.display = 'none'; }} /> : <span>{userInitials}</span>}</div>
+              <div className="zen-profile-heading"><p className="zen-kicker">THE PERSON BEHIND THE JOURNEY</p><h1>{currentUser.name}</h1>
+                <p className="zen-profile-email">{currentUser.email}</p><p>{profile.bio || 'A traveller writing their next chapter, one destination at a time.'}</p>
+                <div className="zen-profile-pills"><span><Compass size={14} /> {profile.travelStyle || 'Thoughtful explorer'}</span><span><MapPin size={14} /> {profile.homeBase || 'Home base not set'}</span></div>
+              </div>
+              <button type="button" onClick={openProfileEditor} className="zen-button zen-button-light"><Pencil size={15} /> Edit profile</button>
+            </div>
+          </section>
+          {profileNotice && <div className="zen-inline-notice" role="status">{profileNotice}</div>}
+          <section className="zen-profile-stats" aria-label="Your actual travel data">
+            {[[trips.length,'Journeys',Globe2],[allSavedCount,'Saved places',BookmarkPlus],[totalFlightCount,'Flights added',Plane],[trips.filter(t=>t.sharedId).length,'Shared trips',Users]].map(([value,label,Icon])=>(
+              <div className="zen-stat" key={label}><Icon size={20}/><strong>{value}</strong><span>{label}</span></div>))}
+          </section>
+          <div className="zen-profile-layout">
+            <section className="zen-profile-panel"><div className="zen-panel-top"><div><p className="zen-kicker">THE PLACES YOU GO</p><h2>Your journeys</h2></div><button onClick={()=>setShowNewTripModal(true)} className="zen-link-button"><Plus size={15}/> New trip</button></div>
+              {trips.length ? <div className="zen-profile-trips">{trips.map((trip,index)=>(<button key={trip.id} className="zen-profile-trip" onClick={()=>{setActiveTripId(trip.id);goTo('overview')}}>
+                <span className="zen-trip-art">{String(index+1).padStart(2,'0')}</span><span className="zen-profile-trip-info"><strong>{trip.name}</strong><small>{trip.startDate || 'Flexible dates'} · {trip.daysCount} days · {trip.savedPlaces?.length || 0} saved places</small></span><ChevronRight size={18}/></button>))}</div>
+                : <p className="zen-empty-copy">No journeys yet. Create a trip to begin your collection.</p>}
+            </section>
+            <div className="zen-profile-side">
+              <section className="zen-profile-panel"><p className="zen-kicker">YOUR TRAVEL RHYTHM</p><h2>Travel preferences</h2>
+                <div className="zen-pref-row"><Leaf size={20}/><div><strong>Travel style</strong><span>{profile.travelStyle || 'Thoughtful explorer'}</span></div></div>
+                <div className="zen-pref-row"><Heart size={20}/><div><strong>What you love</strong><span>{profile.interests || 'Nature, local food, culture'}</span></div></div>
+                <div className="zen-pref-row"><MapPin size={20}/><div><strong>Home base</strong><span>{profile.homeBase || 'Add your home base'}</span></div></div>
+                <button onClick={openProfileEditor} className="zen-link-button"><Pencil size={14}/> Edit preferences <ArrowRight size={15}/></button>
+              </section>
+              <section className="zen-profile-panel zen-profile-account"><p className="zen-kicker">ACCOUNT</p><h2>Your account</h2>
+                <p>Your trips and profile are linked to <strong>{currentUser.email}</strong>.</p>
+                <p><ShieldCheck size={16}/> Signed in securely with your Travelogue account</p>
+                <button className="zen-link-button" onClick={handleLogout}><LogOut size={16}/> Sign out</button>
+              </section>
+            </div>
+          </div>
+        </main>
+      ) : !activeTrip ? (
         <div className="zen-empty max-w-md mx-auto my-auto py-16 sm:py-24 px-4 text-center space-y-4">
           <Globe className="w-12 h-12 mx-auto text-[#ccc9be]" />
           <h2 className="font-serif text-2xl">Your next chapter starts here</h2>
@@ -2105,9 +2196,42 @@ export default function App() {
             </button>
           </div>
         </div>
+      ) : screen === 'overview' ? (
+        <main className="zen-page zen-overview-page" aria-label="Journey overview">
+          <section className="zen-overview-welcome"><div><p className="zen-kicker">A NEW WAY TO WANDER</p><h1>Somewhere beautiful<br/><em>begins here.</em></h1><p>Everything for your next journey, thoughtfully in one place.</p>
+            <div className="zen-overview-welcome-actions"><button className="zen-button zen-button-dark" onClick={()=>goTo('itinerary',1)}><CalendarDays size={16}/> Open itinerary <ArrowRight size={15}/></button><button className="zen-button zen-button-light" onClick={()=>goTo('places')}><BookmarkPlus size={16}/> Browse saved places</button></div>
+          </div><div className="zen-landscape zen-welcome-art" aria-hidden="true"><span className="zen-sun"/><span className="zen-mountain zen-mountain-one"/><span className="zen-mountain zen-mountain-two"/><span className="zen-mountain zen-mountain-three"/></div></section>
+          <div className="zen-overview-layout"><div className="zen-overview-main">
+            <section className="zen-overview-trip-card"><div><p className="zen-kicker">CURRENT CHAPTER <span> / {String(trips.findIndex(t=>t.id===activeTrip.id)+1).padStart(2,'0')}</span></p><h2>{activeTrip.name}</h2><p>{activeTrip.japaneseSub || 'Your next adventure'}</p></div>
+              <div className="zen-trip-metrics"><div><CalendarDays size={19}/><strong>{activeTrip.daysCount}</strong><span>Days</span></div><div><BookmarkPlus size={19}/><strong>{activeTrip.savedPlaces?.length || 0}</strong><span>Places</span></div><div><MapPin size={19}/><strong>{allDayStops.length}</strong><span>Stops</span></div><div><Plane size={19}/><strong>{flightsByDay.length}</strong><span>Flights</span></div></div>
+              <div className="zen-overview-trip-foot"><span><Calendar size={15}/>{activeTrip.startDate ? `${activeTrip.startDate} — ${getEndDateString(activeTrip.startDate,activeTrip.daysCount)}` : 'Dates are flexible'}</span><button className="zen-link-button" onClick={()=>goTo('itinerary',1)}>View your plan <ArrowRight size={15}/></button></div>
+            </section>
+            <section className="zen-overview-section"><div className="zen-panel-top"><div><p className="zen-kicker">YOUR COLLECTION</p><h2>Places worth keeping</h2></div><button className="zen-link-button" onClick={()=>goTo('places')}>All places <ArrowRight size={16}/></button></div>
+              {activeTrip.savedPlaces?.length ? <div className="zen-overview-places">{activeTrip.savedPlaces.slice(0,4).map((place,i)=>{const Icon=getCategoryIcon(place.category);return <button key={place.id} className="zen-overview-place" onClick={()=>{setSearchQuery(place.name);setFilterCategory('ALL');goTo('places')}}><span className={`zen-place-drawing zen-drawing-${i%4}`}><Icon size={26} strokeWidth={1.5}/><small>{String(i+1).padStart(2,'0')}</small></span><strong>{place.name}</strong><small>{place.address || place.area || place.category}</small></button>})}</div>
+                : <div className="zen-calm-empty"><BookmarkPlus size={27}/><p>Your next favourite place is out there.</p><button onClick={()=>{goTo('places');setShowNewPlaceModal(true)}}>Save your first place <ArrowRight size={15}/></button></div>}
+            </section>
+            <section className="zen-overview-section"><div className="zen-panel-top"><div><p className="zen-kicker">THOUGHTFUL PLANNING</p><h2>A little further along</h2></div></div><div className="zen-quick-grid"><button onClick={()=>goTo('places')}><BookmarkPlus/><strong>Gather places</strong><small>Build a collection of meaningful stops</small><ArrowUpRight size={16}/></button><button onClick={()=>goTo('itinerary',1)}><Route/><strong>Shape your days</strong><small>Give every moment enough room</small><ArrowUpRight size={16}/></button><button onClick={()=>goTo('flights')}><Plane/><strong>Follow your flights</strong><small>Schedules, terminals and gates</small><ArrowUpRight size={16}/></button></div></section>
+          </div>
+          <aside className="zen-overview-aside"><div className="zen-aside-illustration"><div className="zen-landscape" aria-hidden="true"><span className="zen-sun"/><span className="zen-mountain zen-mountain-one"/><span className="zen-mountain zen-mountain-two"/><span className="zen-mountain zen-mountain-three"/></div><span className="zen-aside-caption">THE JOY IS IN THE JOURNEY</span></div>
+            <div className="zen-aside-pane"><p className="zen-kicker">A GLANCE AT YOUR PLANS</p><h3>All coming together.</h3><div className="zen-check-row"><span><CheckCircle2 size={17}/> Trip created</span><span>Done</span></div><div className="zen-check-row"><span><BookmarkPlus size={17}/> Saved places</span><span>{activeTrip.savedPlaces?.length || 0} collected</span></div><div className="zen-check-row"><span><CalendarDays size={17}/> Days planned</span><span>{Object.values(activeTrip.schedule || {}).filter(stops=>stops?.length).length}/{activeTrip.daysCount}</span></div><div className="zen-check-row"><span><BedDouble size={17}/> Accommodation</span><span>{tripStays.length} stay{tripStays.length===1?'':'s'}</span></div><button onClick={handleOpenShare} className="zen-outline-action"><Users size={15}/>{activeTrip.sharedId ? 'Manage collaborators' : 'Share this journey'}<ArrowRight size={16}/></button></div>
+          </aside></div>
+        </main>
+      ) : screen === 'flights' ? (
+        <main className="zen-page zen-flights-page" aria-label="Flight planner">
+          <section className="zen-page-heading"><div><p className="zen-kicker">ABOVE THE CLOUDS</p><h1>Your flights</h1><p>Every departure, arrival and connection in one quiet space.</p></div><button className="zen-button zen-button-dark" onClick={handleOpenAddFlight}><Plus size={16}/> Add a flight</button></section>
+          <div className="zen-flights-layout"><section className="zen-flight-list"><div className="zen-panel-top"><div><p className="zen-kicker">{activeTrip.name.toUpperCase()}</p><h2>Flight schedule</h2></div><span className="zen-count">{flightsByDay.length} flight{flightsByDay.length===1?'':'s'}</span></div>
+            {flightsByDay.length ? flightsByDay.map(({day,flight})=>(<div className="zen-flight-card" key={flight.id}>
+              <div className="zen-flight-card-top"><span><Plane size={16}/> {flight.flightNumber || flight.name || 'Scheduled flight'}</span><span>{flight.status || 'Scheduled'}</span></div>
+              <div className="zen-flight-airports"><div><small>DEPARTURE</small><strong>{flight.originCode || flight.departureAirport || '—'}</strong><span>{flight.departureTime || flight.time || 'TBC'} · T{flight.departureTerminal || '—'} · Gate {flight.departureGate || 'TBC'}</span></div><span className="zen-flight-path"><Plane size={19}/></span><div><small>ARRIVAL</small><strong>{flight.destinationCode || flight.arrivalAirport || '—'}</strong><span>{flight.arrivalTime || 'TBC'} · T{flight.arrivalTerminal || '—'} · Gate {flight.arrivalGate || 'TBC'}</span></div></div>
+              <div className="zen-flight-foot"><span><CalendarDays size={14}/> {flight.flightDate || formatDayDate(activeTrip.startDate,day,true)} · Day {day}</span><div><button type="button" onClick={()=>refreshSavedFlight(activeTrip.id,day,flight,true)} disabled={refreshingFlightIds.includes(flight.id)}><RefreshCw size={14} className={refreshingFlightIds.includes(flight.id)?'animate-spin':''}/> Refresh status</button><button type="button" onClick={()=>goTo('itinerary',day)}><Calendar size={14}/> View in itinerary</button></div></div>
+              {flightRefreshErrors[flight.id] && <p className="zen-flight-error">{flightRefreshErrors[flight.id]}</p>}
+            </div>)) : <div className="zen-flight-blank"><Plane size={42}/><h3>Good journeys take flight.</h3><p>Add a flight number and departure date to find its published schedule through AeroAPI.</p><button className="zen-button zen-button-dark" onClick={handleOpenAddFlight}><Plus size={16}/> Find a flight</button></div>}
+          </section><aside className="zen-flight-aside"><div className="zen-landscape" aria-hidden="true"><span className="zen-sun"/><span className="zen-mountain zen-mountain-one"/><span className="zen-mountain zen-mountain-two"/><span className="zen-mountain zen-mountain-three"/></div><p className="zen-kicker">BEFORE YOU GO</p><h2>Keep the little details together.</h2><p>FlightAware AeroAPI supplies published schedules. When operational data becomes available, Travelogue can update terminals, gates and status. Availability depends on the airline and airport.</p><button className="zen-link-button" onClick={()=>goTo('itinerary',1)}>Explore your days <ArrowRight size={16}/></button></aside></div>
+        </main>
       ) : (
-        <main className="zen-workspace max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex-1 w-full">
-          <section className="zen-hero" aria-label="Journey overview">
+        <main className={`zen-workspace zen-${screen}-workspace max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex-1 w-full`} aria-label={screen === 'places' ? 'Saved places' : 'Itinerary'}>
+          <section className="zen-hero zen-detail-hero" aria-label="Current journey">
+            <div className="zen-detail-hero-art" aria-hidden="true" />
             <div className="zen-hero-main">
               <p className="zen-eyebrow"><span className="zen-eyebrow-line" /> YOUR TRAVEL JOURNAL <span className="zen-hero-number">/ {String(trips.findIndex(t => t.id === activeTrip.id) + 1).padStart(2, '0')}</span></p>
               <h1>{activeTrip.name}</h1>
@@ -2155,14 +2279,20 @@ export default function App() {
               </div>
             </div>
           </section>
-          <div className="zen-grid grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
-          {/* Places */}
-          <section className="zen-collection-panel lg:col-span-5 min-w-0 flex flex-col" aria-label="Saved places and discovery">
+          <div className={`zen-detail-content ${screen === 'itinerary' ? 'zen-detail-itinerary' : 'zen-detail-places'}`}>
+          {/* Your saved library, independent from the itinerary */}
+          {screen === 'places' && <section className="zen-collection-panel min-w-0 flex flex-col" aria-label="Saved places and discovery">
             <div className="zen-section-intro">
               <span className="zen-eyebrow">01 / COLLECT</span>
-              <div className="zen-section-intro-row"><h2>Places to keep</h2><span className="zen-section-caption">Your personal collection</span></div>
+              <div className="zen-section-intro-row"><h2>Your travel library</h2><span className="zen-section-caption">Saved places and discoveries</span></div>
             </div>
 
+            <div className="zen-library-heading"><div><p className="zen-kicker">TRAVEL LIBRARY</p><h3>{activeTrip.name} <span>· {activeTrip.savedPlaces?.length || 0} saved</span></h3></div><button className="zen-button zen-button-dark" onClick={()=>setShowNewPlaceModal(true)}><Plus size={15}/> Add place</button></div>
+            <div className="zen-library-toolbar"><div className="zen-toggle" role="group" aria-label="Saved places display"><button type="button" onClick={()=>setPlaceDisplay('map')} aria-pressed={placeDisplay==='map'} className={placeDisplay==='map'?'zen-toggle-active':''}><MapIcon size={15}/> Map</button><button type="button" onClick={()=>setPlaceDisplay('list')} aria-pressed={placeDisplay==='list'} className={placeDisplay==='list'?'zen-toggle-active':''}><List size={15}/> List</button></div><span>Make a collection. Find your rhythm.</span></div>
+            {placeDisplay === 'map' && <div className="zen-library-map" aria-label="Map of your saved places">{loadError ? <p>Google Maps could not load. You can still browse your places below.</p> : isLoaded ? <GoogleMap mapContainerStyle={MAP_CONTAINER_STYLE} center={mapCenter} zoom={activeTrip.zoom || 11} options={DEFAULT_MAP_OPTIONS} onLoad={onLoadMap} onUnmount={onUnmountMap}>
+              {filteredPlaces.filter(place => place.lat != null && place.lng != null).map((place, index)=><MarkerF key={place.id || index} position={{lat:Number(place.lat),lng:Number(place.lng)}} icon={getSavedPin(place.category)} title={place.name} />)}
+              {Object.values(activeTrip.staysByDay||{}).filter((stay,index,arr)=>stay.lat!=null && stay.lng!=null && arr.findIndex(s=>s.name===stay.name && s.address===stay.address)===index).map((stay,index)=><MarkerF key={`stay_${index}`} position={{lat:Number(stay.lat),lng:Number(stay.lng)}} icon={STAY_HOTEL_PIN} title={`Stay: ${stay.name}`}/>)}
+            </GoogleMap> : <p>Loading Google Maps…</p>}</div>}
             {/* Filters */}
             <div className="zen-collection-filters space-y-3">
               <div className="relative">
@@ -2204,11 +2334,12 @@ export default function App() {
                     <p className="text-xs text-[#899489]">A blank page, full of possibilities. Save a place to begin.</p>
                   </div>
                 ) : (
-                  filteredPlaces.map(place => (
+                  filteredPlaces.map((place, index) => (
                     <div
                       key={place.id}
                       className="zen-saved-card p-3 bg-white border border-[#e5e1d7] rounded hover:border-[#ccc9be] transition-all flex flex-col sm:flex-row sm:items-start justify-between gap-3"
                     >
+                      <div className="zen-saved-art" data-category={place.category} aria-hidden="true">{React.createElement(getCategoryIcon(place.category), {size: 27, strokeWidth: 1.35})}<small>{String(index+1).padStart(2,'0')}</small></div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center space-x-2 flex-wrap">
                           <span className="text-xs font-semibold text-[#273c32] break-words">{place.name}</span>
@@ -2217,6 +2348,7 @@ export default function App() {
                           </span>
                         </div>
                         <p className="text-xs text-[#7b887b] mt-0.5">{place.address || place.area}</p>
+                        {place.note && <p className="zen-place-note">{place.note}</p>}
 
                         {(place.rating || place.priceInfo) && (
                           <div className="flex items-center space-x-2 mt-1 text-[11px] text-[#56665a]">
@@ -2253,7 +2385,7 @@ export default function App() {
                           defaultValue=""
                           className="bg-[#f6f5f0] text-xs border border-[#e5e1d7] rounded px-2 py-1 cursor-pointer max-w-[120px]"
                         >
-                          <option value="" disabled>Add to day...</option>
+                          <option value="" disabled>+ Plan a day</option>
                           {Array.from({ length: activeTrip.daysCount }, (_, i) => i + 1).map(d => (
                             <option key={d} value={d}>
                               Day {d} {formatDayDate(activeTrip.startDate, d) ? `(${formatDayDate(activeTrip.startDate, d)})` : ''}
@@ -2263,7 +2395,7 @@ export default function App() {
 
                         <button
                           onClick={() => handleDeleteSavedPlace(place.id)}
-                          className="p-1.5 text-red-500 hover:text-red-700 cursor-pointer"
+                          className="p-1.5 text-red-500 hover:text-red-700 cursor-pointer" title={`Remove ${place.name}`} aria-label={`Remove ${place.name}`}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -2398,13 +2530,13 @@ export default function App() {
               </div>
               </>}
             </div>
-          </section>
+          </section>}
 
           {/* Schedule */}
-          <section className="zen-journey-panel lg:col-span-7 min-w-0 flex flex-col" aria-label="Day by day itinerary">
+          {screen === 'itinerary' && <section className="zen-journey-panel min-w-0 flex flex-col" aria-label="Day by day itinerary">
             <div className="zen-section-intro">
               <span className="zen-eyebrow">02 / EXPLORE</span>
-              <div className="zen-section-intro-row"><h2>Day by day</h2><span className="zen-section-caption">Every moment, in its place</span></div>
+              <div className="zen-section-intro-row"><h2>Your itinerary</h2><span className="zen-section-caption">Every moment, in its place</span></div>
             </div>
             <div className="zen-day-tabs flex items-center space-x-2 border-b border-[#e5e1d7] pb-3 overflow-x-auto min-w-0">
               <button
@@ -2599,9 +2731,9 @@ export default function App() {
                     <MarkerF
                       key={place.id || `saved_${idx}`}
                       position={{ lat: Number(place.lat), lng: Number(place.lng) }}
-                      icon={BLUE_SAVED_PLACE_PIN}
+                      icon={getSavedPin(place.category)}
                       label={{
-                        text: '★',
+                        text: '✦',
                         color: '#ffffff',
                         fontSize: '10px',
                         fontWeight: 'bold'
@@ -3177,10 +3309,22 @@ export default function App() {
                 </div>
               )}
             </div>
-          </section>
+          </section>}
           </div>
         </main>
       )}
+
+      {profileEditing && <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4 overflow-y-auto"><form className="zen-profile-editor" onSubmit={handleProfileSave}>
+        <div className="zen-panel-top"><div><p className="zen-kicker">THE DETAILS THAT MAKE IT YOURS</p><h2>Edit profile</h2></div><button type="button" title="Close" onClick={()=>setProfileEditing(false)}><X size={21}/></button></div>
+        <label>Display name<input required minLength={1} maxLength={80} className={FIELD} value={profileDraft.name} onChange={e=>setProfileDraft(p=>({...p,name:e.target.value}))}/></label>
+        <label>Bio<textarea maxLength={240} rows={3} className={TEXTAREA} placeholder="What kind of journeys do you love?" value={profileDraft.bio} onChange={e=>setProfileDraft(p=>({...p,bio:e.target.value}))}/></label>
+        <label>Home base<input maxLength={100} className={FIELD} placeholder="e.g. Singapore" value={profileDraft.homeBase} onChange={e=>setProfileDraft(p=>({...p,homeBase:e.target.value}))}/></label>
+        <label>Travel style<input maxLength={100} className={FIELD} placeholder="e.g. Slow travel, local life" value={profileDraft.travelStyle} onChange={e=>setProfileDraft(p=>({...p,travelStyle:e.target.value}))}/></label>
+        <label>Interests<input maxLength={160} className={FIELD} placeholder="e.g. Food, nature, architecture" value={profileDraft.interests} onChange={e=>setProfileDraft(p=>({...p,interests:e.target.value}))}/></label>
+        <label>Profile photo URL (optional)<input type="url" className={FIELD} placeholder="https://example.com/my-photo.jpg" value={profileDraft.avatarUrl} onChange={e=>setProfileDraft(p=>({...p,avatarUrl:e.target.value}))}/></label>
+        {profileNotice && <p className="zen-flight-error" role="alert">{profileNotice}</p>}
+        <div className="zen-editor-actions"><button type="button" onClick={()=>setProfileEditing(false)} className="zen-button zen-button-light">Cancel</button><button type="submit" disabled={profileSaving} className="zen-button zen-button-dark"><Check size={16}/>{profileSaving?'Saving…':'Save profile'}</button></div>
+      </form></div>}
 
       {/* Invitation link: guests join using their own signed-in account. */}
       {pendingInvite && (
