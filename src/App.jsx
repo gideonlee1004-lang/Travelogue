@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Plus, Trash2, Sparkles, Search, ArrowUp, ArrowDown, Globe, ExternalLink, BookmarkPlus, Check, RefreshCw, AlertTriangle, Star, Layers, Footprints, Car, Bus, Plane, Hotel, Pin, Pen, User, LogOut, Lock, Mail, Database, CheckCircle2, Calendar, Users, Link2, Copy, UserMinus, X } from 'lucide-react';
+import { Plus, Trash2, Sparkles, Search, ArrowUp, ArrowDown, Globe, ExternalLink, BookmarkPlus, Check, RefreshCw, AlertTriangle, Star, Layers, Footprints, Car, Bus, Plane, Hotel, Pin, Pen, User, LogOut, Lock, Mail, Database, CheckCircle2, Calendar, Users, Link2, Copy, UserMinus, X, ChevronDown } from 'lucide-react';
 import { GoogleMap, useJsApiLoader, MarkerF, PolylineF } from '@react-google-maps/api';
 import { mergeTrip } from '../api/_merge.js';
 
@@ -7,22 +7,22 @@ const LIBRARIES = ['places'];
 
 // ---- Shared form-control styles (every text box / select / date / time uses these) ----
 const FIELD_BASE =
-  'w-full min-w-0 border border-[#e5e5e0] rounded-lg text-base sm:text-sm text-[#111111] placeholder:text-[#aaaaaa] ' +
-  'focus:outline-none focus:border-[#111111] transition-colors appearance-none text-left';
-const FIELD = `${FIELD_BASE} bg-white h-10 px-3`;
-const FIELD_ICON = `${FIELD_BASE} bg-white h-10 pl-9 pr-3`; // input with a leading icon
-const FIELD_DISABLED = `${FIELD_BASE} bg-[#f4f4f0] text-[#999999] h-10 px-3 cursor-not-allowed`;
-const TEXTAREA = `${FIELD_BASE} bg-white px-3 py-2`;
-const SELECT = `${FIELD_BASE} bg-white h-10 pl-3 pr-9 cursor-pointer`;
+  'w-full min-w-0 border border-[#e5e1d7] rounded-lg text-base sm:text-sm text-[#273c32] placeholder:text-[#aab2a7] ' +
+  'focus:outline-none focus:border-[#648472] focus:ring-2 focus:ring-[#648472]/10 transition-colors appearance-none text-left';
+const FIELD = `${FIELD_BASE} bg-white h-11 px-3.5`;
+const FIELD_ICON = `${FIELD_BASE} bg-white h-11 pl-10 pr-3`; // input with a leading icon
+const FIELD_DISABLED = `${FIELD_BASE} bg-[#f0eee7] text-[#a4aca2] h-10 px-3 cursor-not-allowed`;
+const TEXTAREA = `${FIELD_BASE} bg-white px-3.5 py-3`;
+const SELECT = `${FIELD_BASE} bg-white h-11 pl-3.5 pr-9 cursor-pointer`;
 const SELECT_STYLE = {
   backgroundImage: `url("data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#888888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>'
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#899489" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>'
   )}")`,
   backgroundRepeat: 'no-repeat',
   backgroundPosition: 'right 0.75rem center',
   backgroundSize: '1rem'
 };
-const LABEL = 'block text-xs font-medium text-[#666666] mb-1';
+const LABEL = 'block text-[11px] font-semibold tracking-[0.035em] text-[#67766b] mb-1.5';
 
 // Google's place-search web component renders inside a shadow DOM, so we theme it
 // with CSS variables to sit next to the other fields.
@@ -32,11 +32,11 @@ gmp-place-autocomplete.travelogue-place-autocomplete {
   width: 100%;
   color-scheme: light;
   --gmp-mat-color-surface: #ffffff;
-  --gmp-mat-color-on-surface: #111111;
-  --gmp-mat-color-on-surface-variant: #666666;
-  --gmp-mat-color-outline: #e5e5e0;
-  --gmp-mat-color-outline-decorative: #e5e5e0;
-  --gmp-mat-color-primary: #111111;
+  --gmp-mat-color-on-surface: #273c32;
+  --gmp-mat-color-on-surface-variant: #67766b;
+  --gmp-mat-color-outline: #e5e1d7;
+  --gmp-mat-color-outline-decorative: #e5e1d7;
+  --gmp-mat-color-primary: #273c32;
   --gmp-mat-font-family: inherit;
 }
 `;
@@ -50,11 +50,17 @@ const DEFAULT_MAP_OPTIONS = {
   disableDefaultUI: true,
   zoomControl: true,
   styles: [
-    {
-      featureType: 'poi',
-      elementType: 'labels',
-      stylers: [{ visibility: 'off' }]
-    }
+    { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+    { featureType: 'transit', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+    { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#d9ddcf' }] },
+    { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f1f2e9' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9dcd7' }] },
+    { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#668c88' }] },
+    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+    { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e0e5d9' }] },
+    { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#89948b' }] },
+    { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#e5e6cf' }] },
+    { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#dae6d7' }] }
   ]
 };
 
@@ -122,7 +128,7 @@ const pollUserItineraries = knownVersions => apiRequest('/api/trips', {
 // Map pins
 const BLUE_SAVED_PLACE_PIN = {
   url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="30" height="38" viewBox="0 0 24 24" fill="#2563eb" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <svg xmlns="http://www.w3.org/2000/svg" width="30" height="38" viewBox="0 0 24 24" fill="#7e9987" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
       <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
       <circle cx="12" cy="10" r="3.5" fill="#ffffff"></circle>
     </svg>
@@ -132,7 +138,7 @@ const BLUE_SAVED_PLACE_PIN = {
 
 const DARK_ITINERARY_PIN = {
   url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="30" height="38" viewBox="0 0 24 24" fill="#111111" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <svg xmlns="http://www.w3.org/2000/svg" width="30" height="38" viewBox="0 0 24 24" fill="#273c32" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
       <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
       <circle cx="12" cy="10" r="3.5" fill="#ffffff"></circle>
     </svg>
@@ -142,7 +148,7 @@ const DARK_ITINERARY_PIN = {
 
 const STAY_HOTEL_PIN = {
   url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="34" height="42" viewBox="0 0 24 24" fill="#d97706" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <svg xmlns="http://www.w3.org/2000/svg" width="34" height="42" viewBox="0 0 24 24" fill="#bc9b6b" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
       <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
       <circle cx="12" cy="10" r="4" fill="#ffffff"></circle>
     </svg>
@@ -315,19 +321,19 @@ function TravelTimeBar({ from, to, departure }) {
   const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lng}&destination=${to.lat},${to.lng}`;
 
   return (
-    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 sm:gap-2 ml-1 sm:ml-3 pl-3 sm:pl-6 border-l-2 border-dashed border-[#e5e5e0] py-1.5 text-[11px] text-[#555555]">
+    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 sm:gap-2 ml-1 sm:ml-3 pl-3 sm:pl-6 border-l-2 border-dashed border-[#e5e1d7] py-1.5 text-[11px] text-[#56665a]">
       <div className="flex items-center flex-wrap gap-x-3 gap-y-1">
         {TRAVEL_MODES.map(({ key, label, Icon }) => (
           <span key={key} className="flex items-center space-x-1" title={data[key] ? formatDistance(data[key].meters) : ''}>
-            <Icon className="w-3.5 h-3.5 text-[#888888]" />
-            <span className="text-[#888888]">{label}:</span>
-            <span className="font-medium text-[#111111]">
+            <Icon className="w-3.5 h-3.5 text-[#899489]" />
+            <span className="text-[#899489]">{label}:</span>
+            <span className="font-medium text-[#273c32]">
               {loading ? '…' : data[key] ? formatDuration(data[key].seconds) : 'n/a'}
             </span>
           </span>
         ))}
       </div>
-      <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="text-[#888888] hover:text-[#111111] shrink-0 font-medium">
+      <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="text-[#899489] hover:text-[#273c32] shrink-0 font-medium">
         Directions
       </a>
     </div>
@@ -803,6 +809,7 @@ export default function App() {
   const [isRecLoading, setIsRecLoading] = useState(false);
 
   const [recCategory, setRecCategory] = useState('Places to Visit');
+  const [showDiscovery, setShowDiscovery] = useState(false);
 
   const [showNewPlaceModal, setShowNewPlaceModal] = useState(false);
   const [newPlace, setNewPlace] = useState({
@@ -1822,7 +1829,7 @@ export default function App() {
 
   if (authChecking) {
     return (
-      <div className="min-h-screen bg-[#fbfbf9] flex items-center justify-center text-xs text-[#888888]">
+      <div className="min-h-screen bg-[#f6f5f0] flex items-center justify-center text-xs text-[#899489]">
         Connecting to MongoDB Atlas...
       </div>
     );
@@ -1831,24 +1838,25 @@ export default function App() {
   // Mandated Login Page when not authenticated
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-[#fbfbf9] text-[#111111] flex flex-col justify-center items-center px-4 py-8 sm:py-12 font-sans relative">
-        <div className="w-full max-w-md bg-white border border-[#e5e5e0] rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
-          <div className="text-center space-y-2">
+      <div className="zen-auth min-h-screen bg-[#f6f5f0] text-[#273c32] flex flex-col justify-center items-center px-4 py-8 sm:py-12 font-sans relative">
+        <div className="zen-auth-card w-full max-w-md bg-white border border-[#e5e1d7] rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
+          <div className="zen-auth-heading text-center space-y-2">
             <img
               src="/travelogue-logo.png"
               alt="Travelogue Logo"
               className="w-14 h-14 sm:w-16 sm:h-16 object-contain mx-auto mb-1"
             />
-            <h1 className="font-serif text-2xl sm:text-3xl font-medium tracking-tight">Travelogue</h1>
-            <p className="text-xs text-[#888888] tracking-wide">by Li Ze Ying</p>
+            <div className="zen-eyebrow">THE ART OF GOING SOMEWHERE</div>
+            <h1 className="font-serif text-2xl sm:text-3xl font-medium tracking-tight">The journey is yours.</h1>
+            <p className="text-xs text-[#899489] tracking-wide">Welcome back to Travelogue</p>
           </div>
 
           <div className="p-3 bg-emerald-50/80 border border-emerald-200/80 rounded-lg text-xs text-emerald-900 flex items-center space-x-2">
             <Database className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>Sign in to manage and sync your travel itineraries.</span>
+            <span>A quieter space for everything your travels hold.</span>
           </div>
 
-          <div className="flex border-b border-[#e5e5e0] text-xs">
+          <div className="flex border-b border-[#e5e1d7] text-xs">
             <button
               type="button"
               onClick={() => {
@@ -1858,8 +1866,8 @@ export default function App() {
               }}
               className={`flex-1 py-2.5 font-medium border-b-2 transition-all cursor-pointer ${
                 authMode === 'login'
-                  ? 'border-[#111111] text-[#111111]'
-                  : 'border-transparent text-[#888888] hover:text-[#111111]'
+                  ? 'border-[#273c32] text-[#273c32]'
+                  : 'border-transparent text-[#899489] hover:text-[#273c32]'
               }`}
             >
               Sign In
@@ -1873,8 +1881,8 @@ export default function App() {
               }}
               className={`flex-1 py-2.5 font-medium border-b-2 transition-all cursor-pointer ${
                 authMode === 'register'
-                  ? 'border-[#111111] text-[#111111]'
-                  : 'border-transparent text-[#888888] hover:text-[#111111]'
+                  ? 'border-[#273c32] text-[#273c32]'
+                  : 'border-transparent text-[#899489] hover:text-[#273c32]'
               }`}
             >
               Create Account
@@ -1900,7 +1908,7 @@ export default function App() {
               <div>
                 <label className={LABEL}>Full Name</label>
                 <div className="relative">
-                  <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
+                  <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#899489] pointer-events-none" />
                   <input
                     type="text"
                     required
@@ -1916,7 +1924,7 @@ export default function App() {
             <div>
               <label className={LABEL}>Email Address</label>
               <div className="relative">
-                <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
+                <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#899489] pointer-events-none" />
                 <input
                   type="email"
                   required
@@ -1931,7 +1939,7 @@ export default function App() {
             <div>
               <label className={LABEL}>Password</label>
               <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
+                <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#899489] pointer-events-none" />
                 <input
                   type="password"
                   required
@@ -1946,10 +1954,10 @@ export default function App() {
             <button
               type="submit"
               disabled={authSubmitting}
-              className="w-full bg-[#111111] text-white py-3 rounded-lg text-xs font-medium hover:bg-[#333333] transition-all flex items-center justify-center space-x-1.5 shadow-sm mt-2 cursor-pointer disabled:opacity-60"
+              className="w-full bg-[#273c32] text-white py-3 rounded-lg text-xs font-medium hover:bg-[#375448] transition-all flex items-center justify-center space-x-1.5 shadow-sm mt-2 cursor-pointer disabled:opacity-60"
             >
               <User className="w-3.5 h-3.5" />
-              <span>{authSubmitting ? 'Please wait...' : authMode === 'login' ? 'Sign In & Access Travelogue' : 'Register Account'}</span>
+              <span>{authSubmitting ? 'Please wait...' : authMode === 'login' ? 'Continue to my journeys' : 'Register Account'}</span>
             </button>
           </form>
         </div>
@@ -1959,22 +1967,22 @@ export default function App() {
 
   if (dbError && !tripsLoaded) {
     return (
-      <div className="min-h-screen bg-[#fbfbf9] text-[#111111] flex flex-col justify-center items-center px-4 font-sans">
+      <div className="min-h-screen bg-[#f6f5f0] text-[#273c32] flex flex-col justify-center items-center px-4 font-sans">
         <div className="w-full max-w-md bg-white border border-red-200 rounded-2xl p-6 space-y-4 shadow-sm text-center">
           <AlertTriangle className="w-8 h-8 mx-auto text-red-500" />
           <h2 className="font-serif text-xl">Unable to connect to MongoDB Atlas</h2>
-          <p className="text-xs text-[#666666] break-words">{dbError}</p>
+          <p className="text-xs text-[#67766b] break-words">{dbError}</p>
           <div className="flex items-center justify-center space-x-2 text-xs">
             <button
               onClick={() => setReloadKey(k => k + 1)}
               disabled={isDbSyncing}
-              className="px-4 py-2 bg-[#111111] text-white rounded hover:bg-[#333333] cursor-pointer"
+              className="px-4 py-2 bg-[#273c32] text-white rounded hover:bg-[#375448] cursor-pointer"
             >
               {isDbSyncing ? 'Retrying...' : 'Retry'}
             </button>
             <button
               onClick={handleLogout}
-              className="px-4 py-2 border border-[#e5e5e0] rounded hover:border-[#111111] cursor-pointer"
+              className="px-4 py-2 border border-[#e5e1d7] rounded hover:border-[#273c32] cursor-pointer"
             >
               Sign Out
             </button>
@@ -1985,46 +1993,42 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#fbfbf9] text-[#111111] flex flex-col font-sans">
+    <div className="zen-app min-h-screen bg-[#f6f5f0] text-[#273c32] flex flex-col font-sans">
       <style>{PLACE_AUTOCOMPLETE_CSS}</style>
       {/* Header */}
-      <header className="border-b border-[#e5e5e0] bg-[#fbfbf9] sticky top-0 z-40">
+      <header className="zen-header border-b border-[#e5e1d7] bg-[#f6f5f0] sticky top-0 z-40">
         {/* Mobile: row 1 = brand + account, row 2 = trip switcher (full width).
             Desktop (sm+): single row = brand | trip switcher ........ account */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 sm:py-0 sm:h-16 flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-2 sm:gap-x-6">
+        <div className="zen-header-inner max-w-7xl mx-auto px-4 sm:px-6 py-2 sm:py-0 sm:h-16 flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-2 sm:gap-x-6">
           {/* Brand */}
           <div className="flex items-center space-x-2 shrink-0 min-w-0 order-1">
-            <img
-              src="/travelogue-logo.png"
-              alt="Travelogue Logo"
-              className="w-10 h-10 sm:w-12 sm:h-12 object-contain"
-            />
-            <div className="flex flex-col">
-              <span className="font-serif text-lg sm:text-xl font-medium tracking-tight">Travelogue</span>
-              <span className="font-serif text-[9px] sm:text-[10px] tracking-wide text-[#888888] leading-tight">by Li Ze Ying</span>
+            <span className="zen-brand-mark" aria-hidden="true">t<span>.</span></span>
+            <div className="flex flex-col zen-brand-copy">
+              <span className="font-serif text-lg sm:text-xl font-medium tracking-tight">travelogue</span>
+              <span className="zen-brand-subtitle">a place for your journeys</span>
             </div>
           </div>
 
           {/* User Account & Database Status Bar */}
           <div className="flex items-center space-x-2 sm:space-x-4 ml-auto shrink-0 min-w-0 order-2 sm:order-3">
-            <div className="hidden md:flex items-center space-x-1.5 text-[11px] text-[#666666] bg-[#f4f4f0] px-2.5 py-1 rounded border border-[#e5e5e0]">
+            <div className="zen-sync hidden md:flex items-center space-x-1.5 text-[11px] text-[#67766b] bg-[#f0eee7] px-2.5 py-1 rounded border border-[#e5e1d7]">
               <Database className={`w-3.5 h-3.5 ${dbError ? 'text-red-500' : isDbSyncing ? 'text-amber-500 animate-spin' : 'text-emerald-600'}`} />
-              <span>MongoDB Atlas:</span>
-              <span className="font-medium text-[#111111]">
-                {dbError ? 'Error' : isDbSyncing ? 'Syncing...' : `Synced @${currentUser.name}`}
+              <span className="sr-only">Database status:</span>
+              <span className="font-medium text-[#273c32]">
+                {dbError ? 'Error' : isDbSyncing ? 'Syncing...' : 'All changes saved'}
               </span>
             </div>
 
             <div className="flex items-center space-x-1 sm:space-x-3 min-w-0">
-              <div className="flex items-center space-x-1.5 sm:space-x-2 bg-white border border-[#e5e5e0] rounded px-2 sm:px-2.5 py-1 min-w-0">
-                <div className="w-5 h-5 rounded-full bg-[#111111] text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+              <div className="flex items-center space-x-1.5 sm:space-x-2 bg-white border border-[#e5e1d7] rounded px-2 sm:px-2.5 py-1 min-w-0">
+                <div className="w-5 h-5 rounded-full bg-[#273c32] text-white flex items-center justify-center text-[10px] font-bold shrink-0">
                   {currentUser.name ? currentUser.name[0].toUpperCase() : 'U'}
                 </div>
-                <span className="text-xs font-medium text-[#111111] max-w-[72px] sm:max-w-[120px] truncate">{currentUser.name}</span>
+                <span className="text-xs font-medium text-[#273c32] max-w-[72px] sm:max-w-[120px] truncate">{currentUser.name}</span>
               </div>
               <button
                 onClick={handleLogout}
-                className="p-2 sm:p-1.5 text-[#666666] hover:text-red-600 hover:bg-red-50 rounded transition-all cursor-pointer shrink-0"
+                className="p-2 sm:p-1.5 text-[#67766b] hover:text-red-600 hover:bg-red-50 rounded transition-all cursor-pointer shrink-0"
                 title="Sign Out"
                 aria-label="Sign Out"
               >
@@ -2034,7 +2038,7 @@ export default function App() {
           </div>
 
           {/* Trip switcher: full width on mobile, inline (with divider) on desktop */}
-          <div className="order-3 sm:order-2 w-full sm:w-auto flex items-center gap-2 sm:gap-3 sm:border-l sm:border-[#e5e5e0] sm:pl-6">
+          <div className="zen-trip-switcher order-3 sm:order-2 w-full sm:w-auto flex items-center gap-2 sm:gap-3 sm:border-l sm:border-[#e5e1d7] sm:pl-6">
             {trips.length > 0 ? (
               <select
                 value={activeTripId || ''}
@@ -2043,7 +2047,8 @@ export default function App() {
                   setActiveDay(null);
                   setShowShareModal(false);
                 }}
-                className="flex-1 min-w-0 sm:flex-none sm:max-w-[200px] bg-transparent font-medium text-sm border-none outline-none cursor-pointer text-[#111111] truncate"
+                aria-label="Select journey"
+                className="zen-trip-select flex-1 min-w-0 sm:flex-none sm:max-w-[200px] bg-transparent font-medium text-sm border-none outline-none cursor-pointer text-[#273c32] truncate"
               >
                 {trips.map(trip => (
                   <option key={trip.id} value={trip.id}>
@@ -2052,12 +2057,12 @@ export default function App() {
                 ))}
               </select>
             ) : (
-              <span className="flex-1 sm:flex-none text-xs text-[#888888] italic">No active itineraries</span>
+              <span className="flex-1 sm:flex-none text-xs text-[#899489] italic">No active itineraries</span>
             )}
 
             <button
               onClick={() => setShowNewTripModal(true)}
-              className="flex items-center space-x-1 text-xs px-2.5 py-1 border border-[#e5e5e0] rounded hover:border-[#111111] transition-all shrink-0 cursor-pointer"
+              className="zen-new-trip flex items-center space-x-1 text-xs px-2.5 py-1 border border-[#e5e1d7] rounded hover:border-[#273c32] transition-all shrink-0 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>New Trip</span>
@@ -2078,96 +2083,108 @@ export default function App() {
         <div className="bg-amber-50 border-b border-amber-200 text-amber-900 text-xs px-4 py-3 flex flex-wrap items-center justify-center gap-2">
           <AlertTriangle className="w-4 h-4" />
           <span>Someone edited the same field. Your changes are still on this device. Choose which version to keep.</span>
-          <button onClick={() => handleResolveConflict(true)} className="px-3 py-1.5 bg-[#111111] text-white rounded cursor-pointer">Keep my changes</button>
+          <button onClick={() => handleResolveConflict(true)} className="px-3 py-1.5 bg-[#273c32] text-white rounded cursor-pointer">Keep my changes</button>
           <button onClick={() => handleResolveConflict(false)} className="px-3 py-1.5 border border-amber-400 rounded cursor-pointer">Load their version</button>
         </div>
       )}
 
       {/* Main */}
       {!activeTrip ? (
-        <div className="max-w-md mx-auto my-auto py-16 sm:py-24 px-4 text-center space-y-4">
-          <Globe className="w-12 h-12 mx-auto text-[#cccccc]" />
-          <h2 className="font-serif text-2xl">No Itineraries Found</h2>
-          <p className="text-xs text-[#777777]">
-            No itineraries found for {currentUser.email}. Create your first itinerary below.
+        <div className="zen-empty max-w-md mx-auto my-auto py-16 sm:py-24 px-4 text-center space-y-4">
+          <Globe className="w-12 h-12 mx-auto text-[#ccc9be]" />
+          <h2 className="font-serif text-2xl">Your next chapter starts here</h2>
+          <p className="text-xs text-[#7b887b]">
+            Make room for the places you have yet to discover. Begin with a journey, then fill in the details as you go.
           </p>
           <div className="flex items-center justify-center space-x-3 pt-2">
             <button
               onClick={() => setShowNewTripModal(true)}
-              className="px-4 py-2 bg-[#111111] text-white rounded text-xs font-medium hover:bg-[#333333] transition-all cursor-pointer"
+              className="px-4 py-2 bg-[#273c32] text-white rounded text-xs font-medium hover:bg-[#375448] transition-all cursor-pointer"
             >
               + Create New Trip
             </button>
           </div>
         </div>
       ) : (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex-1 w-full grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
-          {/* Places */}
-          <div className="lg:col-span-5 min-w-0 flex flex-col space-y-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-serif font-normal text-[#111111]">{activeTrip.name}</h1>
-                <p className="text-xs text-[#777777] uppercase tracking-wider mt-1 flex items-center space-x-2">
-                  <span>{activeTrip.japaneseSub} • {activeTrip.startDate}</span>
-                  {activeTrip.sharedId && <span>• Shared with {Math.max(0, (sharedMeta[activeTrip.sharedId]?.members?.length || 1) - 1)} editor(s)</span>}
-                </p>
+        <main className="zen-workspace max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex-1 w-full">
+          <section className="zen-hero" aria-label="Journey overview">
+            <div className="zen-hero-main">
+              <p className="zen-eyebrow"><span className="zen-eyebrow-line" /> YOUR TRAVEL JOURNAL <span className="zen-hero-number">/ {String(trips.findIndex(t => t.id === activeTrip.id) + 1).padStart(2, '0')}</span></p>
+              <h1>{activeTrip.name}</h1>
+              <p className="zen-hero-subtitle">{activeTrip.japaneseSub || 'A journey worth remembering'}</p>
+              <div className="zen-hero-stats">
+                <span><Calendar className="w-3.5 h-3.5" /> {activeTrip.startDate || 'Dates not set'}</span>
+                <span><Layers className="w-3.5 h-3.5" /> {activeTrip.daysCount} {activeTrip.daysCount === 1 ? 'day' : 'days'}</span>
+                <span><Pin className="w-3.5 h-3.5" /> {activeTrip.savedPlaces?.length || 0} saved</span>
+                <span><Footprints className="w-3.5 h-3.5" /> {allDayStops.length} planned</span>
+                {activeTrip.sharedId && <span><Users className="w-3.5 h-3.5" /> {Math.max(0, (sharedMeta[activeTrip.sharedId]?.members?.length || 1) - 1)} editors</span>}
               </div>
-
-              <div className="flex items-center space-x-2 shrink-0">
+            </div>
+            <div className="zen-hero-actions">
+              <span className="zen-hero-actions-label">YOUR JOURNEY, YOUR PACE</span>
+              <div className="flex items-center space-x-2 shrink-0 flex-wrap gap-y-2">
                 <button
                   onClick={handleOpenShare}
-                  className="px-2.5 py-2 border border-[#e5e5e0] rounded hover:border-[#111111] transition-all cursor-pointer flex items-center gap-1.5 text-xs"
+                  className="zen-action-primary px-2.5 py-2 border border-[#e5e1d7] rounded hover:border-[#273c32] transition-all cursor-pointer flex items-center gap-1.5 text-xs"
                   title="Share trip and collaborate"
                 >
                   <Users className="w-4 h-4" />
-                  <span>{activeTrip.sharedId ? 'Collaborators' : 'Share'}</span>
+                  <span>{activeTrip.sharedId ? 'Collaborators' : 'Share journey'}</span>
                 </button>
                 <button
                   onClick={handleOpenEditDatesModal}
-                  className="p-2 border border-[#e5e5e0] rounded hover:border-[#111111] transition-all cursor-pointer"
+                  className="zen-icon-action p-2 border border-[#e5e1d7] rounded hover:border-[#273c32] transition-all cursor-pointer"
                   title="Edit Trip Dates"
                 >
                   <Calendar className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setShowNewPlaceModal(true)}
-                  className="p-2 border border-[#e5e5e0] rounded hover:border-[#111111] transition-all cursor-pointer"
+                  className="zen-icon-action p-2 border border-[#e5e1d7] rounded hover:border-[#273c32] transition-all cursor-pointer"
                   title="Add Custom Place"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
                 <button
                   onClick={handleDeleteTrip}
-                  className="p-2 border border-[#e5e5e0] text-red-500 hover:border-red-500 rounded transition-all cursor-pointer"
+                  className="zen-icon-action zen-delete-action p-2 border border-[#e5e1d7] text-red-500 hover:border-red-500 rounded transition-all cursor-pointer"
                   title="Delete Trip"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             </div>
+          </section>
+          <div className="zen-grid grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+          {/* Places */}
+          <section className="zen-collection-panel lg:col-span-5 min-w-0 flex flex-col" aria-label="Saved places and discovery">
+            <div className="zen-section-intro">
+              <span className="zen-eyebrow">01 / COLLECT</span>
+              <div className="zen-section-intro-row"><h2>Places to keep</h2><span className="zen-section-caption">Your personal collection</span></div>
+            </div>
 
             {/* Filters */}
-            <div className="space-y-3">
+            <div className="zen-collection-filters space-y-3">
               <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#888888] pointer-events-none" />
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#899489] pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Search saved places..."
+                  placeholder="Search your saved places"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className={FIELD_ICON}
                 />
               </div>
 
-              <div className="flex space-x-2 overflow-x-auto pb-1 text-xs">
+              <div className="zen-filter-row flex space-x-2 overflow-x-auto pb-1 text-xs">
                 {['ALL', 'Places to Visit', 'Food & Eats', 'Experiences', 'Stays/Hotel', 'Flights'].map(cat => (
                   <button
                     key={cat}
                     onClick={() => setFilterCategory(cat)}
                     className={`px-3 py-1 rounded whitespace-nowrap transition-all cursor-pointer ${
                       filterCategory === cat
-                        ? 'bg-[#111111] text-white'
-                        : 'border border-[#e5e5e0] text-[#666666] hover:border-[#111111]'
+                        ? 'bg-[#273c32] text-white'
+                        : 'border border-[#e5e1d7] text-[#67766b] hover:border-[#273c32]'
                     }`}
                   >
                     {cat}
@@ -2177,32 +2194,32 @@ export default function App() {
             </div>
 
             {/* Saved Places */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-semibold text-[#888888] uppercase tracking-wider">
-                Saved Places ({filteredPlaces.length})
+            <div className="zen-saved-section space-y-3">
+              <h3 className="text-xs font-semibold text-[#899489] uppercase tracking-wider">
+                Saved places <span className="zen-count">{filteredPlaces.length}</span>
               </h3>
-              <div className="space-y-3 overflow-y-auto max-h-[280px] pr-1">
+              <div className="zen-saved-list space-y-3 overflow-y-auto max-h-[280px] pr-1">
                 {filteredPlaces.length === 0 ? (
-                  <div className="text-center py-6 border border-dashed border-[#e5e5e0] rounded">
-                    <p className="text-xs text-[#888888]">No places saved yet.</p>
+                  <div className="text-center py-6 border border-dashed border-[#e5e1d7] rounded">
+                    <p className="text-xs text-[#899489]">A blank page, full of possibilities. Save a place to begin.</p>
                   </div>
                 ) : (
                   filteredPlaces.map(place => (
                     <div
                       key={place.id}
-                      className="p-3 bg-white border border-[#e5e5e0] rounded hover:border-[#cccccc] transition-all flex flex-col sm:flex-row sm:items-start justify-between gap-3"
+                      className="zen-saved-card p-3 bg-white border border-[#e5e1d7] rounded hover:border-[#ccc9be] transition-all flex flex-col sm:flex-row sm:items-start justify-between gap-3"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center space-x-2 flex-wrap">
-                          <span className="text-xs font-semibold text-[#111111] break-words">{place.name}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 bg-[#f4f4f0] text-[#666666] rounded">
+                          <span className="text-xs font-semibold text-[#273c32] break-words">{place.name}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 bg-[#f0eee7] text-[#67766b] rounded">
                             {place.category}
                           </span>
                         </div>
-                        <p className="text-xs text-[#777777] mt-0.5">{place.address || place.area}</p>
+                        <p className="text-xs text-[#7b887b] mt-0.5">{place.address || place.area}</p>
 
                         {(place.rating || place.priceInfo) && (
-                          <div className="flex items-center space-x-2 mt-1 text-[11px] text-[#555555]">
+                          <div className="flex items-center space-x-2 mt-1 text-[11px] text-[#56665a]">
                             {place.rating && (
                               <span className="flex items-center space-x-0.5 text-amber-600 font-medium">
                                 <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
@@ -2217,8 +2234,8 @@ export default function App() {
                           </div>
                         )}
                         {place.openingHours?.weekdayDescriptions?.length > 0 && (
-                          <p className="text-[10px] text-[#777777] mt-1">
-                            <span className="font-medium text-[#555555]">Hours:</span>{' '}
+                          <p className="text-[10px] text-[#7b887b] mt-1">
+                            <span className="font-medium text-[#56665a]">Hours:</span>{' '}
                             {getTodayOpeningHours(place.openingHours) || 'See full hours'}
                           </p>
                         )}
@@ -2234,7 +2251,7 @@ export default function App() {
                             }
                           }}
                           defaultValue=""
-                          className="bg-[#fbfbf9] text-xs border border-[#e5e5e0] rounded px-2 py-1 cursor-pointer max-w-[120px]"
+                          className="bg-[#f6f5f0] text-xs border border-[#e5e1d7] rounded px-2 py-1 cursor-pointer max-w-[120px]"
                         >
                           <option value="" disabled>Add to day...</option>
                           {Array.from({ length: activeTrip.daysCount }, (_, i) => i + 1).map(d => (
@@ -2258,33 +2275,40 @@ export default function App() {
             </div>
 
             {/* Recommendations */}
-            <div className="space-y-3 pt-4 border-t border-[#e5e5e0]">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold text-[#888888] uppercase tracking-wider flex items-center space-x-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-[#111111]" />
-                  <span>Suggestions from Google Maps</span>
-                </h3>
-
+            <div className="zen-discover-section space-y-3 pt-4 border-t border-[#e5e1d7]">
+              <div className="flex items-center justify-between gap-2">
                 <button
+                  type="button"
+                  onClick={() => setShowDiscovery(value => !value)}
+                  aria-expanded={showDiscovery}
+                  className="zen-discover-toggle flex items-center gap-2 text-xs cursor-pointer"
+                >
+                  <Globe className="w-4 h-4 text-[#698a70]" />
+                  <span>Discover nearby</span>
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showDiscovery ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showDiscovery && <button
                   onClick={fetchRecommendations}
                   disabled={isRecLoading}
-                  className="text-[11px] text-[#666666] hover:text-[#111111] flex items-center space-x-1 transition-all cursor-pointer"
+                  className="text-[11px] text-[#67766b] hover:text-[#273c32] flex items-center space-x-1 transition-all cursor-pointer"
                   title="Refresh suggestions"
                 >
                   <RefreshCw className={`w-3 h-3 ${isRecLoading ? 'animate-spin' : ''}`} />
                   <span>Refresh</span>
-                </button>
+                </button>}
               </div>
 
-              <div className="flex space-x-2 overflow-x-auto pb-1 text-[11px]">
+              {showDiscovery && <>
+              <div className="zen-rec-filters flex space-x-2 overflow-x-auto pb-1 text-[11px]">
                 {['Places to Visit', 'Food & Eats', 'Experiences', 'Stays/Hotel'].map(cat => (
                   <button
                     key={cat}
                     onClick={() => setRecCategory(cat)}
                     className={`px-2.5 py-1 rounded whitespace-nowrap transition-all cursor-pointer ${
                       recCategory === cat
-                        ? 'bg-[#111111] text-white'
-                        : 'border border-[#e5e5e0] text-[#666666] hover:border-[#111111]'
+                        ? 'bg-[#273c32] text-white'
+                        : 'border border-[#e5e1d7] text-[#67766b] hover:border-[#273c32]'
                     }`}
                   >
                     {cat}
@@ -2292,14 +2316,14 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="space-y-3 overflow-y-auto max-h-[260px] pr-1">
+              <div className="zen-discover-list space-y-3 overflow-y-auto max-h-[260px] pr-1">
                 {isRecLoading ? (
-                  <div className="py-8 text-center text-xs text-[#888888] space-y-2 border border-dashed border-[#e5e5e0] rounded">
-                    <Sparkles className="w-4 h-4 mx-auto animate-pulse text-[#111111]" />
+                  <div className="py-8 text-center text-xs text-[#899489] space-y-2 border border-dashed border-[#e5e1d7] rounded">
+                    <Sparkles className="w-4 h-4 mx-auto animate-pulse text-[#273c32]" />
                     <p>Finding top-rated places on Google Maps...</p>
                   </div>
                 ) : recommendations.length === 0 ? (
-                  <div className="py-6 text-center text-xs text-[#888888] border border-dashed border-[#e5e5e0] rounded">
+                  <div className="py-6 text-center text-xs text-[#899489] border border-dashed border-[#e5e1d7] rounded">
                     No suggestions found. Check that the Places API (New) is enabled for your Maps key.
                   </div>
                 ) : (
@@ -2311,18 +2335,18 @@ export default function App() {
                     return (
                       <div
                         key={idx}
-                        className="p-3 bg-[#fdfdfe] border border-[#e5e5e0] rounded flex flex-col sm:flex-row sm:items-start justify-between gap-3"
+                        className="zen-rec-card p-3 bg-[#fcfbf8] border border-[#e5e1d7] rounded flex flex-col sm:flex-row sm:items-start justify-between gap-3"
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center space-x-2 flex-wrap">
-                            <span className="text-xs font-medium text-[#111111] break-words">{rec.name}</span>
-                            <span className="text-[9px] px-1.5 py-0.5 bg-[#f4f4f0] text-[#666666] rounded">
+                            <span className="text-xs font-medium text-[#273c32] break-words">{rec.name}</span>
+                            <span className="text-[9px] px-1.5 py-0.5 bg-[#f0eee7] text-[#67766b] rounded">
                               {rec.category}
                             </span>
                           </div>
 
                           <div className="flex items-center space-x-2 mt-0.5 flex-wrap">
-                            <span className="text-[11px] text-[#777777]">{rec.address || rec.area}</span>
+                            <span className="text-[11px] text-[#7b887b]">{rec.address || rec.area}</span>
                             {rec.rating && (
                               <span className="text-[10px] text-amber-600 font-medium flex items-center space-x-0.5">
                                 <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
@@ -2337,13 +2361,13 @@ export default function App() {
                           </div>
 
                           {rec.openingHours?.weekdayDescriptions?.length > 0 && (
-                            <p className="text-[10px] text-[#777777] mt-1">
-                              <span className="font-medium text-[#555555]">Hours:</span>{' '}
+                            <p className="text-[10px] text-[#7b887b] mt-1">
+                              <span className="font-medium text-[#56665a]">Hours:</span>{' '}
                               {getTodayOpeningHours(rec.openingHours) || 'See full hours'}
                             </p>
                           )}
 
-                          {rec.note && <p className="text-[11px] text-[#555555] mt-1 italic">{rec.note}</p>}
+                          {rec.note && <p className="text-[11px] text-[#56665a] mt-1 italic">{rec.note}</p>}
                         </div>
 
                         <button
@@ -2351,8 +2375,8 @@ export default function App() {
                           disabled={isAlreadySaved}
                           className={`flex items-center space-x-1 px-2 py-1 text-xs rounded transition-all cursor-pointer self-end sm:self-start shrink-0 ${
                             isAlreadySaved
-                              ? 'bg-[#f4f4f0] text-[#888888] cursor-default'
-                              : 'border border-[#e5e5e0] bg-white text-[#111111] hover:border-[#111111]'
+                              ? 'bg-[#f0eee7] text-[#899489] cursor-default'
+                              : 'border border-[#e5e1d7] bg-white text-[#273c32] hover:border-[#273c32]'
                           }`}
                         >
                           {isAlreadySaved ? (
@@ -2372,25 +2396,30 @@ export default function App() {
                   })
                 )}
               </div>
+              </>}
             </div>
-          </div>
+          </section>
 
           {/* Schedule */}
-          <div className="lg:col-span-7 min-w-0 flex flex-col space-y-6">
-            <div className="flex items-center space-x-2 border-b border-[#e5e5e0] pb-3 overflow-x-auto min-w-0">
+          <section className="zen-journey-panel lg:col-span-7 min-w-0 flex flex-col" aria-label="Day by day itinerary">
+            <div className="zen-section-intro">
+              <span className="zen-eyebrow">02 / EXPLORE</span>
+              <div className="zen-section-intro-row"><h2>Day by day</h2><span className="zen-section-caption">Every moment, in its place</span></div>
+            </div>
+            <div className="zen-day-tabs flex items-center space-x-2 border-b border-[#e5e1d7] pb-3 overflow-x-auto min-w-0">
               <button
                 onClick={() => setActiveDay(null)}
                 className={`px-3 py-1.5 text-xs font-medium rounded transition-all flex flex-col items-center min-w-[90px] shrink-0 cursor-pointer ${
                   activeDay === null
-                    ? 'bg-[#111111] text-white'
-                    : 'bg-white border border-[#e5e5e0] text-[#666666] hover:border-[#111111]'
+                    ? 'bg-[#273c32] text-white'
+                    : 'bg-white border border-[#e5e1d7] text-[#67766b] hover:border-[#273c32]'
                 }`}
               >
                 <div className="flex items-center space-x-1">
                   <Layers className="w-3 h-3" />
                   <span>Summary</span>
                 </div>
-                <span className={`text-[10px] font-normal ${activeDay === null ? 'text-gray-300' : 'text-[#888888]'}`}>
+                <span className={`text-[10px] font-normal ${activeDay === null ? 'text-gray-300' : 'text-[#899489]'}`}>
                   All Places Map
                 </span>
               </button>
@@ -2403,13 +2432,13 @@ export default function App() {
                     onClick={() => setActiveDay(prev => prev === day ? null : day)}
                     className={`px-3 py-1.5 text-xs font-medium rounded transition-all flex flex-col items-center min-w-[72px] shrink-0 cursor-pointer ${
                       activeDay === day
-                        ? 'bg-[#111111] text-white'
-                        : 'bg-white border border-[#e5e5e0] text-[#666666] hover:border-[#111111]'
+                        ? 'bg-[#273c32] text-white'
+                        : 'bg-white border border-[#e5e1d7] text-[#67766b] hover:border-[#273c32]'
                     }`}
                   >
                     <span>Day {day}</span>
                     {dateFormatted && (
-                      <span className={`text-[10px] font-normal ${activeDay === day ? 'text-gray-300' : 'text-[#888888]'}`}>
+                      <span className={`text-[10px] font-normal ${activeDay === day ? 'text-gray-300' : 'text-[#899489]'}`}>
                         {dateFormatted}
                       </span>
                     )}
@@ -2419,7 +2448,7 @@ export default function App() {
 
               <button
                 onClick={handleAddDay}
-                className="px-3 py-2 text-xs border border-dashed border-[#e5e5e0] text-[#666666] rounded hover:border-[#111111] transition-all flex items-center space-x-1 shrink-0 cursor-pointer"
+                className="px-3 py-2 text-xs border border-dashed border-[#e5e1d7] text-[#67766b] rounded hover:border-[#273c32] transition-all flex items-center space-x-1 shrink-0 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Day</span>
@@ -2427,23 +2456,23 @@ export default function App() {
             </div>
 
             {/* Map */}
-            <div className="w-full h-64 sm:h-80 border border-[#e5e5e0] rounded overflow-hidden relative bg-[#f4f4f0]">
-              <div className="absolute top-2 sm:top-3 right-2 sm:right-3 z-10 bg-white/95 backdrop-blur border border-[#e5e5e0] rounded p-2 sm:px-3 sm:py-2 shadow-sm text-[10px] sm:text-[11px] space-y-1">
+            <div className="zen-map-frame w-full h-64 sm:h-80 border border-[#e5e1d7] rounded overflow-hidden relative bg-[#f0eee7]">
+              <div className="zen-map-legend absolute top-2 sm:top-3 right-2 sm:right-3 z-10 bg-white/95 backdrop-blur border border-[#e5e1d7] rounded p-2 sm:px-3 sm:py-2 shadow-sm text-[10px] sm:text-[11px] space-y-1">
                 <div className="flex items-center space-x-2">
-                  <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-[#111111] inline-block border border-white shadow-sm"></span>
-                  <span className="text-[#333333]">Itinerary Stops</span>
+                  <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-[#273c32] inline-block border border-white shadow-sm"></span>
+                  <span className="text-[#375448]">Itinerary Stops</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-amber-500 inline-block border border-white shadow-sm"></span>
-                  <span className="text-[#333333]">Pinned Stays</span>
+                  <span className="text-[#375448]">Pinned Stays</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-blue-600 inline-block border border-white shadow-sm"></span>
-                  <span className="text-[#333333]">Saved Places</span>
+                  <span className="text-[#375448]">Saved Places</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <span className="w-2.5 h-1 sm:w-3 sm:h-1 bg-blue-600 border-b border-dashed border-blue-600 inline-block"></span>
-                  <span className="text-[#333333]">Flight Routes</span>
+                  <span className="text-[#375448]">Flight Routes</span>
                 </div>
               </div>
 
@@ -2529,7 +2558,7 @@ export default function App() {
                           <PolylineF
                             path={pathPoints}
                             options={{
-                              strokeColor: '#2563eb',
+                              strokeColor: '#7c9c9b',
                               strokeOpacity: 0,
                               strokeWeight: 2,
                               icons: [
@@ -2537,7 +2566,7 @@ export default function App() {
                                   icon: {
                                     path: 'M 0,-1 0,1',
                                     strokeOpacity: 1,
-                                    strokeColor: '#2563eb',
+                                    strokeColor: '#7c9c9b',
                                     scale: 3
                                   },
                                   offset: '0',
@@ -2553,7 +2582,7 @@ export default function App() {
                               icon={{
                                 url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
                                   <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24">
-                                    <circle cx="12" cy="12" r="11" fill="#2563eb" stroke="#ffffff" stroke-width="2"/>
+                                    <circle cx="12" cy="12" r="11" fill="#7e9987" stroke="#ffffff" stroke-width="2"/>
                                     <path transform="translate(12 12) rotate(45)" d="M0 -8.5 Q0.6 -8.5 0.8 -7.3 L1.5 -2 L7 0.8 Q7.7 1.2 7.3 1.9 Q7.0 2.3 6.3 1.9 L1.6 0.7 L1.3 4.8 L2.5 5.8 Q2.9 6.1 2.6 6.5 Q2.4 6.8 2 6.7 L0 6.1 L-2 6.7 Q-2.4 6.8 -2.6 6.5 Q-2.9 6.1 -2.5 5.8 L-1.3 4.8 L-1.6 0.7 L-6.3 1.9 Q-7.0 2.3 -7.3 1.9 Q-7.7 1.2 -7 0.8 L-1.5 -2 L-0.8 -7.3 Q-0.6 -8.5 0 -8.5 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.2" stroke-linejoin="round"/>
                                   </svg>
                                 `),
@@ -2582,25 +2611,25 @@ export default function App() {
                   ))}
                 </GoogleMap>
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-xs text-[#888888]">
+                <div className="w-full h-full flex items-center justify-center text-xs text-[#899489]">
                   Loading Map...
                 </div>
               )}
             </div>
 
             {/* Itinerary Box */}
-            <div className="bg-white border border-[#e5e5e0] rounded p-4 sm:p-5 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#e5e5e0] pb-3 gap-2">
+            <div className="zen-itinerary-card bg-white border border-[#e5e1d7] rounded p-4 sm:p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#e5e1d7] pb-3 gap-2">
                 <div className="flex items-center space-x-2 sm:space-x-3 flex-wrap">
-                  <h2 className="font-serif text-base sm:text-lg text-[#111111]">
-                    {activeDay !== null ? `Day ${activeDay} Itinerary` : 'Trip Summary Overview'}
+                  <h2 className="font-serif text-base sm:text-lg text-[#273c32]">
+                    {activeDay !== null ? `Day ${activeDay} · The itinerary` : 'Your journey at a glance'}
                   </h2>
                   {activeDay !== null && formatDayDate(activeTrip.startDate, activeDay, true) && (
-                    <span className="text-xs font-medium text-[#555555] bg-[#f4f4f0] px-2 py-0.5 rounded border border-[#e5e5e0]">
+                    <span className="text-xs font-medium text-[#56665a] bg-[#f0eee7] px-2 py-0.5 rounded border border-[#e5e1d7]">
                       {formatDayDate(activeTrip.startDate, activeDay, true)}
                     </span>
                   )}
-                  <span className="text-xs text-[#777777]">
+                  <span className="text-xs text-[#7b887b]">
                     • {activeDay !== null ? activeStops.length : allDayStops.length} stops
                   </span>
                 </div>
@@ -2638,7 +2667,7 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => setShowAddStopModal(true)}
-                        className="flex items-center space-x-1 text-xs px-2.5 py-1 border border-[#e5e5e0] rounded hover:border-[#111111] transition-all cursor-pointer"
+                        className="flex items-center space-x-1 text-xs px-2.5 py-1 border border-[#e5e1d7] rounded hover:border-[#273c32] transition-all cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Add Stop</span>
@@ -2675,11 +2704,11 @@ export default function App() {
                               </span>
                             )}
                           </div>
-                          <h4 className="text-sm font-semibold text-[#111111] mt-0.5">
+                          <h4 className="text-sm font-semibold text-[#273c32] mt-0.5">
                             {activeTrip.staysByDay[activeDay].name}
                           </h4>
                           {activeTrip.staysByDay[activeDay].address && (
-                            <p className="text-xs text-[#666666] mt-0.5 truncate">
+                            <p className="text-xs text-[#67766b] mt-0.5 truncate">
                               {activeTrip.staysByDay[activeDay].address}
                             </p>
                           )}
@@ -2742,7 +2771,7 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="p-3 bg-[#fafaf7] border border-dashed border-[#e2e2da] rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                      <div className="flex items-center space-x-2 text-xs text-[#666666]">
+                      <div className="flex items-center space-x-2 text-xs text-[#67766b]">
                         <Hotel className="w-4 h-4 text-amber-600 shrink-0" />
                         <span>No stay added for Day {activeDay} yet.</span>
                       </div>
@@ -2790,10 +2819,10 @@ export default function App() {
                                 <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-1.5 py-0.5 rounded shrink-0">
                                   {group.dayLabel}
                                 </span>
-                                <span className="font-semibold text-[#111111] truncate">{group.stay.name}</span>
+                                <span className="font-semibold text-[#273c32] truncate">{group.stay.name}</span>
                               </div>
                               {group.stay.address && (
-                                <p className="text-[11px] text-[#777777] mt-1 truncate">{group.stay.address}</p>
+                                <p className="text-[11px] text-[#7b887b] mt-1 truncate">{group.stay.address}</p>
                               )}
                               {group.stay.note && (
                                 <p className="text-[10px] text-amber-800/80 italic mt-0.5">{group.stay.note}</p>
@@ -2822,12 +2851,12 @@ export default function App() {
                     </div>
                   )}
 
-                  <div className="p-3 bg-[#fbfbf9] border border-[#e5e5e0] rounded text-xs text-[#555555]">
+                  <div className="p-3 bg-[#f6f5f0] border border-[#e5e1d7] rounded text-xs text-[#56665a]">
                     Showing summary map of all added itinerary stops & saved places segregated by day. Click a day tab above to view/edit specific day schedule.
                   </div>
 
                   {allDayStops.length === 0 ? (
-                    <div className="text-center py-6 text-xs text-[#888888]">
+                    <div className="text-center py-6 text-xs text-[#899489]">
                       No stops added to any day yet. Add places from saved places or click a day to start planning!
                     </div>
                   ) : (
@@ -2840,15 +2869,15 @@ export default function App() {
                         if (dayStops.length === 0 && !dayStay) return null;
 
                         return (
-                          <div key={dayNum} className="border border-[#e5e5e0] rounded-lg overflow-hidden bg-white">
-                            <div className="bg-[#f8f8f5] px-3 py-2 border-b border-[#e5e5e0] flex items-center justify-between">
+                          <div key={dayNum} className="border border-[#e5e1d7] rounded-lg overflow-hidden bg-white">
+                            <div className="bg-[#f8f8f5] px-3 py-2 border-b border-[#e5e1d7] flex items-center justify-between">
                               <div className="flex items-center space-x-2">
-                                <span className="font-semibold text-xs text-[#111111]">Day {dayNum}</span>
+                                <span className="font-semibold text-xs text-[#273c32]">Day {dayNum}</span>
                                 {dayDateStr && (
-                                  <span className="text-[11px] text-[#777777]">({dayDateStr})</span>
+                                  <span className="text-[11px] text-[#7b887b]">({dayDateStr})</span>
                                 )}
                               </div>
-                              <span className="text-[10px] text-[#888888]">
+                              <span className="text-[10px] text-[#899489]">
                                 {dayStops.length} stop{dayStops.length !== 1 ? 's' : ''}
                               </span>
                             </div>
@@ -2881,17 +2910,17 @@ export default function App() {
                               )}
 
                               {dayStops.map((stop, idx) => (
-                                <div key={stop.id || idx} className="p-2.5 border border-[#e5e5e0] rounded flex items-center justify-between gap-3 bg-white text-xs">
+                                <div key={stop.id || idx} className="p-2.5 border border-[#e5e1d7] rounded flex items-center justify-between gap-3 bg-white text-xs">
                                   <div className="flex items-center space-x-2 min-w-0 flex-1">
                                     <span className={`w-5 h-5 rounded-full text-white text-[10px] flex items-center justify-center font-semibold shrink-0 ${
-                                      stop.isFlight ? 'bg-sky-700' : 'bg-[#111111]'
+                                      stop.isFlight ? 'bg-sky-700' : 'bg-[#273c32]'
                                     }`}>
                                       {stop.isFlight ? <Plane className="w-3 h-3" /> : (idx + 1)}
                                     </span>
                                     <div className="min-w-0">
                                       <div className="flex items-center space-x-2 flex-wrap">
-                                        <span className="font-medium text-[#111111]">{stop.name}</span>
-                                        <span className="text-[10px] bg-[#f4f4f0] text-[#555555] px-1.5 py-0.5 rounded border border-[#e5e5e0]">
+                                        <span className="font-medium text-[#273c32]">{stop.name}</span>
+                                        <span className="text-[10px] bg-[#f0eee7] text-[#56665a] px-1.5 py-0.5 rounded border border-[#e5e1d7]">
                                           {stop.time || '12:00'}
                                         </span>
                                         {stop.isFlight && (
@@ -2901,7 +2930,7 @@ export default function App() {
                                         )}
                                       </div>
                                       {(stop.address || stop.area) && (
-                                        <p className="text-xs text-[#777777] mt-0.5 truncate">
+                                        <p className="text-xs text-[#7b887b] mt-0.5 truncate">
                                           {stop.address || stop.area}
                                         </p>
                                       )}
@@ -2913,7 +2942,7 @@ export default function App() {
                                   <div className="flex items-center space-x-3 shrink-0">
                                     <button
                                       onClick={() => handleOpenInGoogleMaps(stop)}
-                                      className="text-[11px] text-[#555555] hover:text-[#111111] flex items-center space-x-1 shrink-0 cursor-pointer"
+                                      className="text-[11px] text-[#56665a] hover:text-[#273c32] flex items-center space-x-1 shrink-0 cursor-pointer"
                                     >
                                       <ExternalLink className="w-3 h-3" />
                                       <span>Maps</span>
@@ -2921,7 +2950,7 @@ export default function App() {
                                     {stop.lat != null && stop.lng != null && (
                                       <button
                                         onClick={() => handleOpenInYahooCarNavi(stop)}
-                                        className="text-[11px] text-[#555555] hover:text-[#111111] flex items-center space-x-1 shrink-0 cursor-pointer"
+                                        className="text-[11px] text-[#56665a] hover:text-[#273c32] flex items-center space-x-1 shrink-0 cursor-pointer"
                                         title="Open in Yahoo!カーナビ"
                                       >
                                         <Car className="w-3 h-3" />
@@ -2940,7 +2969,7 @@ export default function App() {
                 </div>
               ) : activeStops.length === 0 ? (
                 <div className="text-center py-8 space-y-3">
-                  <p className="text-xs text-[#888888]">No stops scheduled for Day {activeDay}.</p>
+                  <p className="text-xs text-[#899489]">No stops scheduled for Day {activeDay}.</p>
                   <div className="flex items-center justify-center space-x-2">
                     <button
                       onClick={handleOpenAddFlight}
@@ -2951,7 +2980,7 @@ export default function App() {
                     </button>
                     <button
                       onClick={() => setShowAddStopModal(true)}
-                      className="flex items-center space-x-1 text-xs px-3 py-1.5 border border-[#e5e5e0] rounded hover:border-[#111111] transition-all cursor-pointer"
+                      className="flex items-center space-x-1 text-xs px-3 py-1.5 border border-[#e5e1d7] rounded hover:border-[#273c32] transition-all cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Add Stop</span>
@@ -2982,12 +3011,12 @@ export default function App() {
                             ? 'bg-red-50/40 border-red-200' 
                             : stop.isFlight 
                               ? 'bg-sky-50/40 border-sky-200' 
-                              : 'border-[#f0f0eb] hover:border-[#e5e5e0]'
+                              : 'border-[#eeece4] hover:border-[#e5e1d7]'
                         }`}
                       >
                         <div className="flex items-start sm:items-center space-x-3 min-w-0 flex-1">
                           <span className={`w-6 h-6 rounded-full text-white text-xs flex items-center justify-center font-semibold shrink-0 mt-0.5 sm:mt-0 ${
-                            stop.isFlight ? 'bg-sky-700' : 'bg-[#111111]'
+                            stop.isFlight ? 'bg-sky-700' : 'bg-[#273c32]'
                           }`}>
                             {stop.isFlight ? <Plane className="w-3.5 h-3.5" /> : (idx + 1)}
                           </span>
@@ -3021,11 +3050,11 @@ export default function App() {
                                     })
                                   );
                                 }}
-                                className="text-[10px] bg-[#fbfbf9] border border-[#e5e5e0] rounded px-1 py-0.5"
+                                className="text-[10px] bg-[#f6f5f0] border border-[#e5e1d7] rounded px-1 py-0.5"
                               />
 
                               {stop.arrivalTime && (
-                                <span className="text-[10px] text-[#666666]">
+                                <span className="text-[10px] text-[#67766b]">
                                   → Arr: {stop.arrivalTime}
                                 </span>
                               )}
@@ -3039,7 +3068,7 @@ export default function App() {
                             </div>
 
                             {(stop.address || stop.area) && (
-                              <p className="text-xs text-[#777777] mt-0.5 break-words">
+                              <p className="text-xs text-[#7b887b] mt-0.5 break-words">
                                 {stop.address || stop.area}
                               </p>
                             )}
@@ -3059,8 +3088,8 @@ export default function App() {
                             </div>
 
                             {stop.openingHours?.weekdayDescriptions?.length > 0 && (
-                              <p className="text-[10px] text-[#777777] mt-1 max-w-[420px]">
-                                <span className="font-medium text-[#555555]">Hours:</span>{' '}
+                              <p className="text-[10px] text-[#7b887b] mt-1 max-w-[420px]">
+                                <span className="font-medium text-[#56665a]">Hours:</span>{' '}
                                 {getTodayOpeningHours(stop.openingHours) || 'See full hours'}
                               </p>
                             )}
@@ -3081,7 +3110,7 @@ export default function App() {
                                   {stop.cancelled && <span className="font-semibold text-red-700">Cancelled</span>}
                                   {stop.estimatedDepartureTime && <span>Est. departure: {new Date(stop.estimatedDepartureTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: stop.departureTimezone || 'UTC' })} (departure local)</span>}
                                 </div>
-                                <div className="flex flex-wrap items-center gap-2 text-[#777777]">
+                                <div className="flex flex-wrap items-center gap-2 text-[#7b887b]">
                                   <span>{stop.lastChecked ? `AeroAPI checked ${new Date(stop.lastChecked).toLocaleString()}` : 'Live status not yet checked'}</span>
                                   <button type="button" onClick={() => refreshSavedFlight(activeTrip.id, activeDay, stop, true)} disabled={refreshingFlightIds.includes(stop.id)}
                                     className="inline-flex gap-1 items-center text-sky-700 font-medium disabled:opacity-50 cursor-pointer">
@@ -3091,14 +3120,14 @@ export default function App() {
                                 {flightRefreshErrors[stop.id] && <p className="text-red-700">{flightRefreshErrors[stop.id]}</p>}
                               </div>
                             )}
-                            {stop.note && <p className="text-xs text-[#666666] mt-0.5">{stop.note}</p>}
+                            {stop.note && <p className="text-xs text-[#67766b] mt-0.5">{stop.note}</p>}
                           </div>
                         </div>
 
                         <div className="flex items-center space-x-1 shrink-0 self-end sm:self-center">
                           <button
                             onClick={() => handleOpenInGoogleMaps(stop)}
-                            className="flex items-center space-x-1 text-[11px] text-[#444444] border border-[#e5e5e0] px-2 py-1 rounded hover:border-[#111111] transition-all cursor-pointer"
+                            className="flex items-center space-x-1 text-[11px] text-[#4b5c50] border border-[#e5e1d7] px-2 py-1 rounded hover:border-[#273c32] transition-all cursor-pointer"
                           >
                             <ExternalLink className="w-3 h-3" />
                             <span>Maps</span>
@@ -3106,7 +3135,7 @@ export default function App() {
                           {stop.lat != null && stop.lng != null && (
                             <button
                               onClick={() => handleOpenInYahooCarNavi(stop)}
-                              className="flex items-center space-x-1 text-[11px] text-[#444444] border border-[#e5e5e0] px-2 py-1 rounded hover:border-[#111111] transition-all cursor-pointer"
+                              className="flex items-center space-x-1 text-[11px] text-[#4b5c50] border border-[#e5e1d7] px-2 py-1 rounded hover:border-[#273c32] transition-all cursor-pointer"
                               title="Open in Yahoo!カーナビ"
                             >
                               <Car className="w-3 h-3" />
@@ -3115,7 +3144,7 @@ export default function App() {
                           )}
                           <button
                             onClick={() => handleOpenEditStopModal(stop)}
-                            className="p-1 text-[#888888] hover:text-[#111111] cursor-pointer"
+                            className="p-1 text-[#899489] hover:text-[#273c32] cursor-pointer"
                             title="Edit Place"
                           >
                             <Pen className="w-3.5 h-3.5" />
@@ -3123,14 +3152,14 @@ export default function App() {
                           <button
                             onClick={() => handleMoveStop(activeDay, idx, -1)}
                             disabled={idx === 0}
-                            className="p-1 text-[#888888] disabled:opacity-30 cursor-pointer"
+                            className="p-1 text-[#899489] disabled:opacity-30 cursor-pointer"
                           >
                             <ArrowUp className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => handleMoveStop(activeDay, idx, 1)}
                             disabled={idx === activeStops.length - 1}
-                            className="p-1 text-[#888888] disabled:opacity-30 cursor-pointer"
+                            className="p-1 text-[#899489] disabled:opacity-30 cursor-pointer"
                           >
                             <ArrowDown className="w-3.5 h-3.5" />
                           </button>
@@ -3148,8 +3177,9 @@ export default function App() {
                 </div>
               )}
             </div>
+          </section>
           </div>
-        </div>
+        </main>
       )}
 
       {/* Invitation link: guests join using their own signed-in account. */}
@@ -3157,11 +3187,11 @@ export default function App() {
         <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md space-y-4">
             <div className="flex items-center gap-2"><Users className="w-5 h-5" /><h3 className="font-serif text-xl">Join a shared trip</h3></div>
-            <p className="text-sm text-[#666666]">Accept this invitation to co-edit the itinerary using your Travelogue account. Other collaborators can see your name and email address.</p>
+            <p className="text-sm text-[#67766b]">Accept this invitation to co-edit the itinerary using your Travelogue account. Other collaborators can see your name and email address.</p>
             {joinError && <p className="text-xs text-red-600">{joinError}</p>}
             <div className="flex gap-3 justify-end">
               <button disabled={joinBusy} onClick={clearInvitation} className="text-xs px-4 py-2 rounded border border-[#dddddd] cursor-pointer">Cancel</button>
-              <button disabled={joinBusy || !tripsLoaded} onClick={handleJoinTrip} className="text-xs px-4 py-2 rounded bg-[#111111] text-white cursor-pointer disabled:opacity-50">
+              <button disabled={joinBusy || !tripsLoaded} onClick={handleJoinTrip} className="text-xs px-4 py-2 rounded bg-[#273c32] text-white cursor-pointer disabled:opacity-50">
                 {joinBusy ? 'Joining...' : 'Join as editor'}
               </button>
             </div>
@@ -3172,41 +3202,41 @@ export default function App() {
       {/* Sharing and collaborator management */}
       {showShareModal && activeTrip && (
         <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-[#fbfbf9] border border-[#e5e5e0] rounded-xl shadow-xl p-5 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-5">
-            <div className="flex justify-between items-center border-b border-[#e5e5e0] pb-3">
+          <div className="bg-[#f6f5f0] border border-[#e5e1d7] rounded-xl shadow-xl p-5 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-5">
+            <div className="flex justify-between items-center border-b border-[#e5e1d7] pb-3">
               <div className="flex items-center gap-2"><Users className="w-5 h-5" /><h3 className="font-serif text-lg">Trip collaboration</h3></div>
               <button onClick={() => setShowShareModal(false)} className="p-1.5 rounded hover:bg-[#eeeeea] cursor-pointer" aria-label="Close"><X className="w-4 h-4" /></button>
             </div>
             {shareError && <div className="text-xs text-red-700 bg-red-50 p-3 rounded">{shareError}</div>}
             {!activeTrip.sharedId ? (
               <div className="space-y-4">
-                <p className="text-sm text-[#555555]">Invite friends to edit saved places, daily schedules, flights and stays together. Everyone needs a Travelogue account.</p>
-                <button disabled={shareBusy} onClick={handleEnableSharing} className="w-full px-4 py-3 bg-[#111111] text-white text-xs rounded-lg disabled:opacity-50 cursor-pointer">
+                <p className="text-sm text-[#56665a]">Invite friends to edit saved places, daily schedules, flights and stays together. Everyone needs a Travelogue account.</p>
+                <button disabled={shareBusy} onClick={handleEnableSharing} className="w-full px-4 py-3 bg-[#273c32] text-white text-xs rounded-lg disabled:opacity-50 cursor-pointer">
                   {shareBusy ? 'Enabling...' : 'Enable co-editing & generate invite link'}
                 </button>
               </div>
             ) : !shareDetails ? (
-              <p className="text-xs text-[#666666]">{shareBusy ? 'Loading shared trip...' : 'Unable to load sharing details.'}</p>
+              <p className="text-xs text-[#67766b]">{shareBusy ? 'Loading shared trip...' : 'Unable to load sharing details.'}</p>
             ) : (
               <div className="space-y-5">
-                <div className="text-xs flex items-center gap-2 text-[#666666]"><CheckCircle2 className="w-4 h-4 text-emerald-600" /> Automatic sync • checks for changes every 6 seconds</div>
+                <div className="text-xs flex items-center gap-2 text-[#67766b]"><CheckCircle2 className="w-4 h-4 text-emerald-600" /> Automatic sync • checks for changes every 6 seconds</div>
                 {shareDetails.role === 'owner' && (
                   <section className="space-y-2">
                     <p className="font-medium text-sm flex items-center gap-1.5"><Link2 className="w-4 h-4" /> Invitation link</p>
-                    <p className="text-xs text-[#666666]">Anyone with this link can join as an editor after signing in. Share it only with people you trust.</p>
+                    <p className="text-xs text-[#67766b]">Anyone with this link can join as an editor after signing in. Share it only with people you trust.</p>
                     <div className="flex gap-2">
                       <input readOnly aria-label="Invitation link" value={shareLink} onFocus={e => e.target.select()} className={FIELD} />
-                      <button onClick={handleCopyShareLink} className="px-3 py-2 bg-[#111111] text-white rounded flex gap-1 items-center text-xs cursor-pointer"><Copy className="w-4 h-4" />{linkCopied ? 'Copied' : 'Copy'}</button>
+                      <button onClick={handleCopyShareLink} className="px-3 py-2 bg-[#273c32] text-white rounded flex gap-1 items-center text-xs cursor-pointer"><Copy className="w-4 h-4" />{linkCopied ? 'Copied' : 'Copy'}</button>
                     </div>
-                    <button onClick={() => handleShareAction('regenerate')} disabled={shareBusy} className="text-xs underline text-[#666666] hover:text-[#111111] cursor-pointer disabled:opacity-50">Reset invitation link</button>
+                    <button onClick={() => handleShareAction('regenerate')} disabled={shareBusy} className="text-xs underline text-[#67766b] hover:text-[#273c32] cursor-pointer disabled:opacity-50">Reset invitation link</button>
                   </section>
                 )}
                 <section className="space-y-2">
                   <h4 className="font-medium text-sm">Collaborators ({shareDetails.members?.length || 0})</h4>
-                  <div className="divide-y border-y border-[#e5e5e0]">
+                  <div className="divide-y border-y border-[#e5e1d7]">
                     {(shareDetails.members || []).map(member => (
                       <div key={member.id} className="py-3 flex justify-between items-center gap-2">
-                        <div className="min-w-0"><p className="text-xs font-medium truncate">{member.name} <span className="text-[#999999]">· {member.role}</span></p><p className="text-[11px] text-[#777777] truncate">{member.email}</p></div>
+                        <div className="min-w-0"><p className="text-xs font-medium truncate">{member.name} <span className="text-[#a4aca2]">· {member.role}</span></p><p className="text-[11px] text-[#7b887b] truncate">{member.email}</p></div>
                         {shareDetails.role === 'owner' && member.role === 'editor' && (
                           <button disabled={shareBusy} onClick={() => handleShareAction('remove', { memberId: member.id })} title="Remove editor" className="p-2 text-red-600 cursor-pointer disabled:opacity-50"><UserMinus className="w-4 h-4" /></button>
                         )}
@@ -3214,7 +3244,7 @@ export default function App() {
                     ))}
                   </div>
                 </section>
-                <div className="border-t border-[#e5e5e0] pt-3">
+                <div className="border-t border-[#e5e1d7] pt-3">
                   {shareDetails.role === 'owner' ? (
                     <button disabled={shareBusy} onClick={() => handleShareAction('stop')} className="text-xs text-red-600 underline cursor-pointer disabled:opacity-50">Stop sharing (keep my private trip)</button>
                   ) : (
@@ -3232,17 +3262,17 @@ export default function App() {
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <form
             onSubmit={handleSaveEditedDates}
-            className="bg-[#fbfbf9] border border-[#e5e5e0] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-[#f6f5f0] border border-[#e5e1d7] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
           >
-            <div className="flex items-center justify-between border-b border-[#e5e5e0] pb-3">
+            <div className="flex items-center justify-between border-b border-[#e5e1d7] pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center space-x-2">
-                <Calendar className="w-5 h-5 text-[#111111]" />
+                <Calendar className="w-5 h-5 text-[#273c32]" />
                 <span>Edit Itinerary Dates</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setShowEditDatesModal(false)}
-                className="text-xs text-[#888888] hover:text-[#111111] cursor-pointer"
+                className="text-xs text-[#899489] hover:text-[#273c32] cursor-pointer"
               >
                 Close
               </button>
@@ -3280,22 +3310,22 @@ export default function App() {
                   />
                 </div>
               </div>
-              <p className="text-[11px] text-[#777777]">
+              <p className="text-[11px] text-[#7b887b]">
                 Total Duration: {calculateDaysCount(editDatesForm.startDate, editDatesForm.endDate)} day(s)
               </p>
             </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e5e5e0]">
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e5e1d7]">
               <button
                 type="button"
                 onClick={() => setShowEditDatesModal(false)}
-                className="px-3 py-1.5 border border-[#e5e5e0] text-[#666666] rounded hover:border-[#111111] text-xs cursor-pointer"
+                className="px-3 py-1.5 border border-[#e5e1d7] text-[#67766b] rounded hover:border-[#273c32] text-xs cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 bg-[#111111] text-white rounded text-xs font-medium hover:bg-[#333333] transition-all cursor-pointer shadow-xs"
+                className="px-4 py-1.5 bg-[#273c32] text-white rounded text-xs font-medium hover:bg-[#375448] transition-all cursor-pointer shadow-xs"
               >
                 Save Changes
               </button>
@@ -3309,9 +3339,9 @@ export default function App() {
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <form
             onSubmit={handleSetStayForDays}
-            className="bg-[#fbfbf9] border border-[#e5e5e0] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-[#f6f5f0] border border-[#e5e1d7] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
           >
-            <div className="flex items-center justify-between border-b border-[#e5e5e0] pb-3">
+            <div className="flex items-center justify-between border-b border-[#e5e1d7] pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center space-x-2">
                 <Hotel className="w-5 h-5 text-amber-600" />
                 <span>Add Stay / Hotel</span>
@@ -3319,7 +3349,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setShowStayModal(false)}
-                className="text-xs text-[#888888] hover:text-[#111111] cursor-pointer"
+                className="text-xs text-[#899489] hover:text-[#273c32] cursor-pointer"
               >
                 Close
               </button>
@@ -3328,8 +3358,8 @@ export default function App() {
             {/* Quick Selector from Saved Places */}
             {activeTrip.savedPlaces && activeTrip.savedPlaces.length > 0 && (
               <div className="space-y-1.5 text-xs">
-                <label className="block text-xs font-medium text-[#666666]">Select from Saved Places</label>
-                <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 bg-white border border-[#e5e5e0] rounded">
+                <label className="block text-xs font-medium text-[#67766b]">Select from Saved Places</label>
+                <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 bg-white border border-[#e5e1d7] rounded">
                   {activeTrip.savedPlaces.map((place) => (
                     <button
                       key={place.id}
@@ -3349,7 +3379,7 @@ export default function App() {
                       className={`text-[11px] px-2 py-1 rounded border transition-all flex items-center space-x-1 cursor-pointer ${
                         stayForm.name === place.name
                           ? 'bg-amber-500 text-white border-amber-600 font-medium'
-                          : 'bg-[#f8f8f5] border-[#e5e5e0] text-[#333333] hover:border-amber-400'
+                          : 'bg-[#f8f8f5] border-[#e5e1d7] text-[#375448] hover:border-amber-400'
                       }`}
                     >
                       <Hotel className="w-3 h-3" />
@@ -3441,11 +3471,11 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e5e5e0]">
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e5e1d7]">
               <button
                 type="button"
                 onClick={() => setShowStayModal(false)}
-                className="px-3 py-1.5 border border-[#e5e5e0] text-[#666666] rounded hover:border-[#111111] text-xs cursor-pointer"
+                className="px-3 py-1.5 border border-[#e5e1d7] text-[#67766b] rounded hover:border-[#273c32] text-xs cursor-pointer"
               >
                 Cancel
               </button>
@@ -3465,17 +3495,17 @@ export default function App() {
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <form
             onSubmit={handleAddDirectStop}
-            className="bg-[#fbfbf9] border border-[#e5e5e0] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-[#f6f5f0] border border-[#e5e1d7] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
           >
-            <div className="flex items-center justify-between border-b border-[#e5e5e0] pb-3">
+            <div className="flex items-center justify-between border-b border-[#e5e1d7] pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center space-x-2">
-                <Plus className="w-5 h-5 text-[#111111]" />
+                <Plus className="w-5 h-5 text-[#273c32]" />
                 <span>Add Custom Stop (Day {activeDay || 1})</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setShowAddStopModal(false)}
-                className="text-xs text-[#888888] hover:text-[#111111] cursor-pointer"
+                className="text-xs text-[#899489] hover:text-[#273c32] cursor-pointer"
               >
                 Close
               </button>
@@ -3534,17 +3564,17 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e5e5e0]">
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e5e1d7]">
               <button
                 type="button"
                 onClick={() => setShowAddStopModal(false)}
-                className="px-3 py-1.5 border border-[#e5e5e0] text-[#666666] rounded hover:border-[#111111] text-xs cursor-pointer"
+                className="px-3 py-1.5 border border-[#e5e1d7] text-[#67766b] rounded hover:border-[#273c32] text-xs cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 bg-[#111111] text-white rounded text-xs font-medium hover:bg-[#333333] transition-all cursor-pointer shadow-xs"
+                className="px-4 py-1.5 bg-[#273c32] text-white rounded text-xs font-medium hover:bg-[#375448] transition-all cursor-pointer shadow-xs"
               >
                 Add Stop
               </button>
@@ -3558,17 +3588,17 @@ export default function App() {
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <form
             onSubmit={handleSaveEditedStop}
-            className="bg-[#fbfbf9] border border-[#e5e5e0] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-[#f6f5f0] border border-[#e5e1d7] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
           >
-            <div className="flex items-center justify-between border-b border-[#e5e5e0] pb-3">
+            <div className="flex items-center justify-between border-b border-[#e5e1d7] pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center space-x-2">
-                <Pen className="w-5 h-5 text-[#111111]" />
+                <Pen className="w-5 h-5 text-[#273c32]" />
                 <span>Edit Place in Itinerary (Day {activeDay})</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setShowEditStopModal(false)}
-                className="text-xs text-[#888888] hover:text-[#111111] cursor-pointer"
+                className="text-xs text-[#899489] hover:text-[#273c32] cursor-pointer"
               >
                 Close
               </button>
@@ -3638,17 +3668,17 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e5e5e0]">
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e5e1d7]">
               <button
                 type="button"
                 onClick={() => setShowEditStopModal(false)}
-                className="px-3 py-1.5 border border-[#e5e5e0] text-[#666666] rounded hover:border-[#111111] text-xs cursor-pointer"
+                className="px-3 py-1.5 border border-[#e5e1d7] text-[#67766b] rounded hover:border-[#273c32] text-xs cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 bg-[#111111] text-white rounded text-xs font-medium hover:bg-[#333333] transition-all cursor-pointer shadow-xs"
+                className="px-4 py-1.5 bg-[#273c32] text-white rounded text-xs font-medium hover:bg-[#375448] transition-all cursor-pointer shadow-xs"
               >
                 Save Changes
               </button>
@@ -3660,13 +3690,13 @@ export default function App() {
       {/* Add Flight Modal — flight number and departure date only; airports/times come from AeroAPI. */}
       {showAddFlightModal && activeTrip && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-[#fbfbf9] border border-[#e5e5e0] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-[#e5e5e0] pb-3">
+          <div className="bg-[#f6f5f0] border border-[#e5e1d7] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#e5e1d7] pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center gap-2">
                 <Plane className="w-5 h-5 text-sky-600" /> Add Flight
               </h3>
               <button type="button" onClick={() => setShowAddFlightModal(false)}
-                className="text-xs text-[#888888] hover:text-[#111111] cursor-pointer">Close</button>
+                className="text-xs text-[#899489] hover:text-[#273c32] cursor-pointer">Close</button>
             </div>
 
             <form onSubmit={handleSearchFlight} className="space-y-3">
@@ -3699,14 +3729,14 @@ export default function App() {
                 <div className="space-y-2 max-h-56 overflow-y-auto">
                   {flightMatches.map((flight, idx) => (
                     <label key={`${flight.scheduledOut}_${flight.originCode}_${idx}`}
-                      className={`flex items-start gap-2 p-3 cursor-pointer rounded border text-xs ${selectedFlightIndex === idx ? 'border-sky-600 bg-sky-50' : 'border-[#e5e5e0] bg-white'}`}>
+                      className={`flex items-start gap-2 p-3 cursor-pointer rounded border text-xs ${selectedFlightIndex === idx ? 'border-sky-600 bg-sky-50' : 'border-[#e5e1d7] bg-white'}`}>
                       <input type="radio" name="selectedFlight" className="mt-0.5" checked={selectedFlightIndex === idx}
                         onChange={() => setSelectedFlightIndex(idx)} />
                       <div className="space-y-1 min-w-0">
                         <div className="font-semibold">{flight.originCode} → {flight.destinationCode}</div>
                         <div>{flight.departureAirport} → {flight.arrivalAirport}</div>
-                        <div className="text-[#666666]">{flight.departureTime || 'Time unavailable'} → {flight.arrivalTime || 'Time unavailable'} (local airport times)</div>
-                        <div className="text-[#666666]">Departure terminal: {flight.departureTerminal || 'Not published'} · Gate: {flight.departureGate || 'Not assigned'}</div>
+                        <div className="text-[#67766b]">{flight.departureTime || 'Time unavailable'} → {flight.arrivalTime || 'Time unavailable'} (local airport times)</div>
+                        <div className="text-[#67766b]">Departure terminal: {flight.departureTerminal || 'Not published'} · Gate: {flight.departureGate || 'Not assigned'}</div>
                       </div>
                     </label>
                   ))}
@@ -3723,11 +3753,11 @@ export default function App() {
                       onChange={e => setNewFlight(prev => ({ ...prev, bookingRef: e.target.value }))} className={FIELD} />
                   </div>
                 </div>
-                <p className="text-[11px] text-[#777777]">Terminal and gate depend on airline/airport reporting. Gate details are checked again automatically on flight day while the app is open. Seat and booking reference are visible to trip collaborators.</p>
+                <p className="text-[11px] text-[#7b887b]">Terminal and gate depend on airline/airport reporting. Gate details are checked again automatically on flight day while the app is open. Seat and booking reference are visible to trip collaborators.</p>
               </div>
             )}
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#e5e5e0]">
-              <button type="button" onClick={() => setShowAddFlightModal(false)} className="px-3 py-1.5 border border-[#e5e5e0] text-[#666666] rounded text-xs cursor-pointer">Cancel</button>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#e5e1d7]">
+              <button type="button" onClick={() => setShowAddFlightModal(false)} className="px-3 py-1.5 border border-[#e5e1d7] text-[#67766b] rounded text-xs cursor-pointer">Cancel</button>
               <button type="button" onClick={handleAddFlight} disabled={!flightMatches.length || flightLookupBusy}
                 className="px-4 py-1.5 bg-sky-700 text-white rounded text-xs font-medium disabled:opacity-40 cursor-pointer">Add Flight</button>
             </div>
@@ -3740,17 +3770,17 @@ export default function App() {
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <form
             onSubmit={handleCreatePlace}
-            className="bg-[#fbfbf9] border border-[#e5e5e0] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-[#f6f5f0] border border-[#e5e1d7] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
           >
-            <div className="flex items-center justify-between border-b border-[#e5e5e0] pb-3">
+            <div className="flex items-center justify-between border-b border-[#e5e1d7] pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center space-x-2">
-                <BookmarkPlus className="w-5 h-5 text-[#111111]" />
+                <BookmarkPlus className="w-5 h-5 text-[#273c32]" />
                 <span>Add Custom Place to Saved</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setShowNewPlaceModal(false)}
-                className="text-xs text-[#888888] hover:text-[#111111] cursor-pointer"
+                className="text-xs text-[#899489] hover:text-[#273c32] cursor-pointer"
               >
                 Close
               </button>
@@ -3823,17 +3853,17 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e5e5e0]">
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e5e1d7]">
               <button
                 type="button"
                 onClick={() => setShowNewPlaceModal(false)}
-                className="px-3 py-1.5 border border-[#e5e5e0] text-[#666666] rounded hover:border-[#111111] text-xs cursor-pointer"
+                className="px-3 py-1.5 border border-[#e5e1d7] text-[#67766b] rounded hover:border-[#273c32] text-xs cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 bg-[#111111] text-white rounded text-xs font-medium hover:bg-[#333333] transition-all cursor-pointer shadow-xs"
+                className="px-4 py-1.5 bg-[#273c32] text-white rounded text-xs font-medium hover:bg-[#375448] transition-all cursor-pointer shadow-xs"
               >
                 Save Place
               </button>
@@ -3847,17 +3877,17 @@ export default function App() {
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <form
             onSubmit={handleCreateTrip}
-            className="bg-[#fbfbf9] border border-[#e5e5e0] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-[#f6f5f0] border border-[#e5e1d7] rounded-lg max-w-md w-full p-4 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
           >
-            <div className="flex items-center justify-between border-b border-[#e5e5e0] pb-3">
+            <div className="flex items-center justify-between border-b border-[#e5e1d7] pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center space-x-2">
-                <Globe className="w-5 h-5 text-[#111111]" />
+                <Globe className="w-5 h-5 text-[#273c32]" />
                 <span>Create New Itinerary</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setShowNewTripModal(false)}
-                className="text-xs text-[#888888] hover:text-[#111111] cursor-pointer"
+                className="text-xs text-[#899489] hover:text-[#273c32] cursor-pointer"
               >
                 Close
               </button>
@@ -3937,17 +3967,17 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e5e5e0]">
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#e5e1d7]">
               <button
                 type="button"
                 onClick={() => setShowNewTripModal(false)}
-                className="px-3 py-1.5 border border-[#e5e5e0] text-[#666666] rounded hover:border-[#111111] text-xs cursor-pointer"
+                className="px-3 py-1.5 border border-[#e5e1d7] text-[#67766b] rounded hover:border-[#273c32] text-xs cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-1.5 bg-[#111111] text-white rounded text-xs font-medium hover:bg-[#333333] transition-all cursor-pointer shadow-xs"
+                className="px-4 py-1.5 bg-[#273c32] text-white rounded text-xs font-medium hover:bg-[#375448] transition-all cursor-pointer shadow-xs"
               >
                 Create Itinerary
               </button>

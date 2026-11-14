@@ -1,29 +1,471 @@
 @import "tailwindcss";
 
-body {
-  margin: 0;
-  padding: 0;
-  font-family: 'Inter', sans-serif;
-  background-color: #fbfbf9;
-  color: #111111;
+/*
+ * Travelogue / Stillness
+ * A quiet, editorial design system. The data model, API calls and interaction
+ * handlers remain in App.jsx; this file intentionally concerns presentation.
+ */
+:root {
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #273c32;
+  background: #f6f5f0;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --zen-ink: #273c32;
+  --zen-moss: #6f8875;
+  --zen-mist: #f6f5f0;
+  --zen-paper: #fffefa;
+  --zen-line: #e5e1d7;
+  --zen-muted: #788578;
+  --zen-gold: #a78a64;
 }
 
-/* Custom scrollbar styling for minimal aesthetic */
-
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; min-width: 320px; background: var(--zen-mist); color: var(--zen-ink); }
+button, input, select, textarea { font: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, select:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 2px solid #7f9d89;
+  outline-offset: 3px;
 }
+::selection { background: #cfdfcd; color: #273c32; }
+.font-serif { font-family: 'Instrument Serif', Georgia, serif; }
 
-::-webkit-scrollbar-track {
+::-webkit-scrollbar { height: 6px; width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d7d8cc; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #b9c3b5; }
+
+/* Brand & navigation */
+.zen-app { min-height: 100dvh; }
+.zen-header {
+  background: rgba(255,254,250,.97);
+  border-bottom: 1px solid #e9e6dd;
+  box-shadow: 0 1px 0 rgba(30,50,39,.025);
+  backdrop-filter: blur(12px);
+}
+.zen-header-inner { min-height: 76px; max-width: 1360px; gap: 16px 32px; }
+.zen-brand-mark, .zen-auth-mark {
+  display: grid;
+  place-items: center;
+  background: #283e32;
+  color: #faf7ef;
+  border-radius: 12px;
+  flex: 0 0 auto;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  letter-spacing: -.07em;
+  font-size: 31px;
+  line-height: 1;
+  width: 43px;
+  height: 43px;
+  padding-bottom: 5px;
+}
+.zen-brand-mark span, .zen-auth-mark span { color: #d7c098; }
+.zen-brand-copy { justify-content: center; line-height: 1; gap: 3px; }
+.zen-brand-copy > span:first-child {
+  font-family: 'Instrument Serif', Georgia, serif;
+  letter-spacing: -.025em;
+  font-size: 25px;
+  font-weight: 400;
+}
+.zen-brand-subtitle {
+  font-size: 9px;
+  letter-spacing: .11em;
+  color: #859185;
+  font-weight: 500;
+}
+.zen-trip-switcher { border-color: #e5e1d7; }
+.zen-trip-select {
+  letter-spacing: -.01em;
+  font-size: 13px;
   background: transparent;
+  max-width: 240px;
+  padding: 7px 8px;
+  border-radius: 8px;
+}
+.zen-trip-select:hover { background: #f4f2eb; }
+.zen-new-trip {
+  border-radius: 999px;
+  padding: 9px 14px;
+  font-size: 11px;
+  background: #edf0e8;
+  border-color: #e0e7db;
+  color: #334b3c;
+  font-weight: 650;
+}
+.zen-new-trip:hover { background: #dfe9db; border-color: #c7d5c6; }
+.zen-sync {
+  background: transparent;
+  border: none;
+  border-radius: 20px;
+  gap: 5px;
+  color: #758676;
+  font-size: 10px;
+}
+.zen-sync svg { width: 12px; height: 12px; }
+.zen-header button[title="Sign Out"] { border-radius: 11px; }
+.zen-header .rounded-full { background: #d6e0d6; color: #294336; }
+
+/* The journal cover */
+.zen-workspace { max-width: 1360px; padding-top: 30px; padding-bottom: 65px; }
+.zen-hero {
+  position: relative;
+  background: #e9eee5;
+  border: 1px solid #dfe6da;
+  border-radius: 23px;
+  overflow: hidden;
+  min-height: 211px;
+  padding: 30px 34px;
+  margin-bottom: 25px;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 25px;
+}
+.zen-hero::before {
+  content: '';
+  position: absolute;
+  width: 460px;
+  height: 460px;
+  right: -185px;
+  top: -175px;
+  border: 1px solid rgba(65,99,74,.12);
+  border-radius: 50%;
+  box-shadow: 0 0 0 36px rgba(255,255,255,.08), 0 0 0 72px rgba(84,112,81,.035), 0 0 0 108px rgba(255,255,255,.09);
+  pointer-events: none;
+}
+.zen-hero::after {
+  content: '';
+  position: absolute;
+  width: 110px;
+  height: 110px;
+  right: 102px;
+  top: -63px;
+  border: 1px solid rgba(65,99,74,.15);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.zen-hero-main, .zen-hero-actions { position: relative; z-index: 1; }
+.zen-hero-main { min-width: 0; }
+.zen-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: #6b8570;
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+}
+.zen-eyebrow-line { height: 1px; width: 19px; background: #73967c; display: inline-block; }
+.zen-hero-number { opacity: .6; font-weight: 500; letter-spacing: .1em; }
+.zen-hero h1 {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-weight: 400;
+  line-height: 1.01;
+  font-size: clamp(43px,4.9vw,67px);
+  letter-spacing: -.035em;
+  margin-top: 18px;
+  max-width: 700px;
+  overflow-wrap: anywhere;
+}
+.zen-hero-subtitle {
+  margin-top: 5px;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 19px;
+  font-style: italic;
+  color: #788f7c;
+}
+.zen-hero-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 20px;
+  margin-top: 23px;
+}
+.zen-hero-stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #526958;
+  font-size: 11px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+.zen-hero-stats svg { color: #76937b; stroke-width: 1.7; }
+.zen-hero-actions { display: grid; justify-items: end; gap: 13px; margin-bottom: 3px; }
+.zen-hero-actions-label { font-size: 9px; letter-spacing: .18em; color: #729078; font-weight: 700; white-space: nowrap; }
+.zen-hero-actions button { min-height: 37px; border-radius: 10px; background: #fffefa; border: 1px solid #d8e2d6; color: #3f5848; }
+.zen-hero-actions button:hover { border-color: #abc1ab; background: #fff; transform: translateY(-1px); }
+.zen-hero-actions .zen-action-primary { background: #284235; border-color: #284235; color: #fff; padding: 9px 14px; }
+.zen-hero-actions .zen-action-primary:hover { background: #3b5d47; color: #fff; }
+.zen-hero-actions .zen-delete-action { color: #9d716b; }
+.zen-hero-actions .zen-delete-action:hover { background: #fff5f2; border-color: #e3c9c5; }
+
+/* Editorial columns */
+.zen-grid { align-items: start; gap: 26px; }
+.zen-collection-panel, .zen-journey-panel {
+  min-width: 0;
+  gap: 21px;
+}
+.zen-collection-panel {
+  background: #fffefa;
+  border: 1px solid #e9e6dc;
+  border-radius: 22px;
+  padding: 26px 24px 25px;
+  box-shadow: 0 4px 24px rgba(44,57,44,.025);
+}
+.zen-journey-panel { padding: 25px 0 0; }
+.zen-section-intro .zen-eyebrow { color: #91a08c; font-size: 9px; }
+.zen-section-intro-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 8px; }
+.zen-section-intro h2 { font-family: 'Instrument Serif',Georgia,serif; font-size: 32px; font-weight: 400; letter-spacing: -.018em; line-height: 1.08; }
+.zen-section-caption { color: #a1a89e; font-size: 10px; white-space: nowrap; }
+.zen-collection-filters { margin-top: 5px; }
+.zen-collection-filters .relative > svg { left: 15px; color: #859987; }
+.zen-collection-filters input { border-radius: 12px; border-color: #e6e6dd; background: #f9faf6; }
+.zen-collection-filters input:focus { background: #fff; }
+.zen-filter-row, .zen-rec-filters { gap: 6px; scrollbar-width: none; }
+.zen-filter-row::-webkit-scrollbar, .zen-rec-filters::-webkit-scrollbar { display: none; }
+.zen-filter-row > button, .zen-rec-filters > button {
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1.4;
+  padding: 7px 12px;
+  border-color: #e3e6da;
+  background: #fbfbf7;
+  color: #697568;
+  font-weight: 600;
+}
+.zen-filter-row > button:hover, .zen-rec-filters > button:hover { border-color: #afc3ad; color: #345140; }
+.zen-filter-row > button.bg-\[\#273c32\], .zen-rec-filters > button.bg-\[\#273c32\] {
+  background: #2e4b3a;
+  border-color: #2e4b3a;
+  color: #fff;
+}
+.zen-saved-section h3, .zen-discover-section h3 {
+  color: #8c998a;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .13em;
+  line-height: 20px;
+}
+.zen-count {
+  font-variant-numeric: tabular-nums;
+  color: #405b48;
+  background: #edf0e9;
+  padding: 3px 8px;
+  margin-left: 5px;
+  border-radius: 8px;
+  letter-spacing: 0;
+}
+.zen-saved-list { max-height: 425px; padding-right: 4px; }
+.zen-saved-card, .zen-rec-card {
+  border: 1px solid #e9e9e2;
+  border-radius: 14px;
+  padding: 14px 15px;
+  background: #fff;
+  gap: 12px;
+  box-shadow: 0 1px 0 rgba(45,63,45,.015);
+}
+.zen-saved-card:hover, .zen-rec-card:hover { border-color: #b6c8b5; background: #fff; }
+.zen-saved-card span.font-semibold, .zen-rec-card span.font-medium { font-size: 12px; font-weight: 650; line-height: 1.45; }
+.zen-saved-card span.bg-\[\#f0eee7\], .zen-rec-card span.bg-\[\#f0eee7\] {
+  border-radius: 6px; background: #ecf1e9; color: #6c836d; font-size: 9px;
+}
+.zen-saved-card select { border-radius: 9px; background: #f5f7f1; border-color: #e4e8df; color: #566a59; padding: 7px 8px; }
+.zen-saved-card select:hover { background: #edf3e8; }
+.zen-saved-card button, .zen-rec-card button { border-radius: 9px; }
+.zen-discover-section { border-top: 1px solid #eeeee5; padding-top: 20px; }
+.zen-discover-list { max-height: 330px; padding-right: 4px; }
+.zen-rec-card { background: #fafaf7; }
+.zen-rec-card > button { padding: 8px 10px; }
+
+/* Day selector and the map */
+.zen-day-tabs { border: none; padding: 0 0 2px; gap: 8px; scrollbar-width: thin; }
+.zen-day-tabs > button {
+  min-width: 82px;
+  min-height: 53px;
+  border: 1px solid #e2e5dc;
+  border-radius: 13px;
+  background: #fffefa;
+  color: #60705f;
+  padding: 10px 15px;
+  gap: 4px;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+.zen-day-tabs > button:hover { border-color: #9daf9f; }
+.zen-day-tabs > button.bg-\[\#273c32\] { border-color: #2c4738; background: #2c4738; color: #fff; }
+.zen-day-tabs > button.bg-\[\#273c32\] span { color: inherit; }
+.zen-day-tabs > button:last-child { border-style: dashed; background: transparent; min-width: 96px; }
+.zen-map-frame {
+  border: 1px solid #dfe6db;
+  border-radius: 20px;
+  background: #e8eee8;
+  height: clamp(285px, 28vw, 385px);
+  box-shadow: 0 4px 14px rgba(45,57,44,.025);
+  isolation: isolate;
+}
+.zen-map-legend {
+  padding: 11px 13px;
+  border-radius: 13px;
+  border: 1px solid rgba(220,228,216,.8);
+  background: rgba(255,254,250,.94);
+  color: #526454;
+  box-shadow: 0 5px 22px rgba(42,62,42,.08);
+  font-size: 10px;
+}
+.zen-map-legend span.bg-\[\#273c32\] { background: #314b3d; }
+.zen-map-legend span.bg-blue-600, .zen-map-legend span.border-blue-600 { background: #7e9987; border-color: #7e9987; }
+.zen-map-legend span.bg-amber-500 { background: #bc9b6b; }
+.zen-map-legend .text-\[\#333333\] { color: #59695b; }
+.zen-map-frame .gm-style > div > div > button { border-radius: 11px; }
+
+/* Timeline */
+.zen-itinerary-card {
+  border: 1px solid #e8e7de;
+  border-radius: 22px;
+  background: #fffefa;
+  padding: 24px;
+  box-shadow: 0 4px 18px rgba(45,58,44,.018);
+}
+.zen-itinerary-card h2 { font-family: 'Instrument Serif', Georgia, serif; font-size: 25px; line-height: 1.15; }
+.zen-itinerary-card > div:first-child { border-color: #ebeee5; padding-bottom: 17px; }
+.zen-itinerary-card button { transition: background .14s ease, border-color .14s ease, color .14s ease; }
+.zen-itinerary-card button.border-\[\#e5e1d7\] { border-radius: 9px; }
+.zen-itinerary-card input[type="time"] {
+  min-height: 29px;
+  color: #45614b;
+  border-color: #e1e8dc;
+  border-radius: 8px;
+}
+.zen-itinerary-card .rounded-full { border-radius: 10px; }
+.zen-itinerary-card .bg-\[\#273c32\] { background: #304c3d; }
+.zen-itinerary-card .border-\[\#f0f0eb\] { border-color: #e8ebe3; }
+.zen-itinerary-card .hover\:border-\[\#e5e1d7\]:hover { border-color: #adc6b1; }
+
+/* Modal styling is global, so every existing flow benefits without rewriting logic. */
+.zen-app .fixed.inset-0[class*="bg-black"] { backdrop-filter: blur(3px); }
+.zen-app .fixed.inset-0[class*="bg-black"] > form,
+.zen-app .fixed.inset-0[class*="bg-black"] > div[class*="max-w"] {
+  background: #fffefa;
+  border: 1px solid #e5e3d9;
+  border-radius: 20px;
+  box-shadow: 0 25px 85px rgba(27,40,28,.16);
+}
+.zen-app .fixed.inset-0[class*="bg-black"] h3 {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-weight: 400;
+  font-size: 24px;
+}
+.zen-app input:not([type="checkbox"]):not([type="radio"]), .zen-app textarea, .zen-app select {
+  accent-color: #3d6550;
+}
+.zen-app input[type="date"], .zen-app input[type="time"] { color-scheme: light; }
+
+/* Authentication */
+.zen-auth {
+  overflow: hidden;
+  background: #e9eee6;
+  isolation: isolate;
+}
+.zen-auth::before {
+  content: '';
+  position: fixed;
+  top: -140px;
+  left: -140px;
+  width: 490px;
+  height: 490px;
+  border: 1px solid #d4ded1;
+  border-radius: 50%;
+  box-shadow: 0 0 0 55px rgba(255,255,255,.09), 0 0 0 110px rgba(109,143,113,.04), 0 0 0 165px rgba(255,255,255,.06);
+  pointer-events: none;
+  z-index: -1;
+}
+.zen-auth::after {
+  content: 'TRAVELOGUE     /     THE PLACES WE KEEP';
+  position: absolute;
+  left: 5vw;
+  bottom: 28px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .22em;
+  color: #849788;
+}
+.zen-auth-card {
+  position: relative;
+  max-width: 420px;
+  background: #fffefa;
+  border-radius: 22px;
+  padding: 38px 36px;
+  border-color: #e0e7db;
+  box-shadow: 0 16px 62px rgba(39,60,50,.085);
+}
+.zen-auth-heading { margin-bottom: 7px; }
+.zen-auth-heading .zen-auth-mark { margin: 0 auto 22px; width: 57px; height: 57px; font-size: 38px; border-radius: 17px; }
+.zen-auth-heading .zen-eyebrow { justify-content: center; margin-bottom: 11px; color: #839a85; letter-spacing: .19em; }
+.zen-auth-heading h1 { font-family: 'Instrument Serif',Georgia,serif; font-size: 39px; line-height: 1.08; letter-spacing: -.015em; }
+.zen-auth-card input { background: #fafbf7; border-radius: 11px; }
+.zen-auth-card label { font-weight: 650; }
+.zen-auth-card form > button { border-radius: 11px; font-size: 12px; min-height: 45px; }
+.zen-auth-card > .p-3 { border-radius: 11px; }
+.zen-auth-card button { transition: background .15s ease; }
+
+.zen-empty { max-width: 480px; }
+.zen-empty svg { color: #a2b5a3; }
+.zen-empty h2 { font-size: 36px; }
+.zen-empty p { font-size: 13px; line-height: 1.7; }
+.zen-empty button { border-radius: 12px; padding: 13px 19px; }
+
+@media (max-width: 1023px) {
+  .zen-grid { gap: 26px; }
+  .zen-collection-panel { padding: 24px; }
+  .zen-journey-panel { padding-top: 0; }
+  .zen-hero { padding: 28px; flex-direction: column; align-items: stretch; }
+  .zen-hero-actions { justify-items: start; }
+}
+@media (max-width: 767px) {
+  .zen-header-inner { min-height: 70px; padding-top: 12px; padding-bottom: 12px; }
+  .zen-trip-switcher { margin-top: 2px; padding-top: 8px; border-top: 1px solid #eeece6; }
+  .zen-trip-select { max-width: none; }
+  .zen-header .zen-brand-mark { width: 39px; height: 39px; font-size: 28px; }
+  .zen-brand-copy > span:first-child { font-size: 22px; }
+  .zen-brand-subtitle { font-size: 8px; }
+  .zen-workspace { padding-top: 16px; padding-bottom: 40px; }
+  .zen-hero { padding: 24px 22px; flex-direction: column; align-items: stretch; gap: 22px; border-radius: 19px; }
+  .zen-hero h1 { font-size: clamp(41px,9vw,53px); margin-top: 15px; }
+  .zen-hero-subtitle { font-size: 18px; }
+  .zen-hero-stats { gap: 8px 16px; margin-top: 20px; }
+  .zen-hero-actions { justify-items: start; gap: 8px; }
+  .zen-hero-actions-label { font-size: 8px; }
+  .zen-hero-actions > div { flex-wrap: wrap; }
+  .zen-collection-panel { padding: 22px 17px; border-radius: 19px; }
+  .zen-section-intro h2 { font-size: 29px; }
+  .zen-map-frame { height: 320px; border-radius: 16px; }
+  .zen-itinerary-card { padding: 17px; border-radius: 19px; }
+  .zen-auth-card { padding: 29px 23px; }
+}
+@media (max-width: 380px) {
+  .zen-section-caption { display: none; }
+  .zen-hero-stats span { font-size: 10px; }
+  .zen-map-legend { padding: 7px 9px; font-size: 9px; }
+  .zen-saved-card { padding: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
 
-::-webkit-scrollbar-thumb {
-  background: #e5e5e0;
-  border-radius: 3px;
+/* Discovery stays one intentional click away, instead of competing with the plan. */
+.zen-discover-toggle {
+  color: #536e5a;
+  background: transparent;
+  border: none;
+  padding: 5px 0;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: .04em;
 }
-
-::-webkit-scrollbar-thumb:hover {
-  background: #cccccc;
-}
+.zen-discover-toggle:hover { color: #294d36; }
+.zen-discover-toggle svg:last-child { color: #9bab9b; }
