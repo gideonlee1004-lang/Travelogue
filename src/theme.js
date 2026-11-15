@@ -44,7 +44,7 @@ const TYPE_TAGS = [
   [/museum|art_gallery|historical|cultural|landmark|monument|castle/, 'Culture', Landmark],
   [/cafe|coffee|bakery|tea_house|dessert/, 'Cafe', Coffee],
   [/restaurant|food|meal|sushi|ramen|izakaya|bar|market/, 'Food', Utensils],
-  [/lodging|hotel|ryokan|hostel|resort|onsen|spa/, 'Stay', BedDouble],
+  [/^(lodging|hotel|resort_hotel|ryokan|japanese_inn|inn|hostel|motel|guest_house|bed_and_breakfast|onsen|spa)$/, 'Stay', BedDouble],
   [/shopping|store|mall|department/, 'Shopping', ShoppingBag],
   [/tourist_attraction|point_of_interest|amusement|zoo|aquarium/, 'Sightseeing', Camera],
   [/train|station|transit|airport/, 'Transit', Train],
@@ -75,7 +75,8 @@ export function shortLocation(place) {
   const addr = place.area && place.area !== place.address ? place.area : (place.address || '');
   if (!addr) return '';
   // "1-2-3 Asakusa, Taito City, Tokyo, Japan" → "Taito City, Tokyo"
-  const parts = addr.split(',').map(s => s.trim()).filter(Boolean);
+  // drop postcodes, including ones glued to a region ("Hokkaido 047-0031" → "Hokkaido")
+  const parts = addr.split(',').map(s => s.replace(/\s*〒?\s*\d{3}-\d{4}\b/, '').replace(/\s+\d{5}(-\d{4})?$/, '').trim()).filter(Boolean);
   const cleaned = parts.filter(p => !/^\d{3}-?\d{4}$/.test(p) && !/^\d/.test(p));
   if (cleaned.length === 0) return parts[0] || '';
   if (cleaned.length >= 3) return `${cleaned[cleaned.length - 3]}, ${cleaned[cleaned.length - 2]}`;
@@ -148,8 +149,8 @@ const GLYPH_RULES = [
   [/onsen|spa|hot_spring|bath/, 'lotus'],
   [/cafe|coffee|bakery|tea_house|dessert/, 'coffee'],
   [/restaurant|food|meal|sushi|ramen|izakaya|bar|market/, 'utensils'],
-  [/lodging|hotel|ryokan|hostel|resort/, 'bed'],
-  [/mountain|volcano|peak|viewpoint|observation/, 'mountain'],
+  [/ski_resort|ropeway|cable_car|gondola|mountain|volcano|peak|viewpoint|observation/, 'mountain'],
+  [/\b(lodging|hotel|resort_hotel|ryokan|japanese_inn|inn|hostel|motel|guest_house|bed_and_breakfast)\b/, 'bed'],
   [/beach|lake|river|bay|waterfall|coast|island/, 'wave'],
   [/park|garden|forest|hiking|nature|campground|botanical/, 'tree'],
   [/museum|art_gallery|historical|cultural|landmark|monument|castle|palace/, 'landmark'],

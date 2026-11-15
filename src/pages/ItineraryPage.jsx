@@ -400,14 +400,14 @@ function Itinerary(ctx) {
       <div className="lg:ml-auto flex gap-2">
         <Btn variant="outline" icon={Sparkles} onClick={() => ctx.optimizeDay(day)} title="Reorder today's stops by shortest path" className="flex-1 lg:flex-none whitespace-nowrap">Optimize Route</Btn>
         <Btn variant="outline" icon={Wand2} onClick={() => ctx.autoPlanDay(day)} title="Fill today with unscheduled saved places" className="flex-1 lg:flex-none whitespace-nowrap">Auto Plan</Btn>
-        <Btn icon={Plus} onClick={ctx.handleAddDay} className="max-lg:hidden">Add Day</Btn>
+        <Btn icon={Plus} onClick={ctx.handleAddDay} className="max-xl:hidden">Add Day</Btn>
       </div>
     </Card>
   );
 
-  // Phones: days as a strip you swipe. Larger screens: the full list at the side.
+  // Phones and tablets: days as a strip you swipe. Wide screens: the full list at the side.
   const dayStrip = (
-    <div className="lg:hidden tl-strip flex gap-2 -mx-4 px-4 pb-0.5">
+    <div className="xl:hidden tl-strip flex gap-2 -mx-4 px-4 sm:-mx-6 sm:px-6 pb-0.5">
       {days.map(d => {
         const active = d === day;
         return (
@@ -423,7 +423,7 @@ function Itinerary(ctx) {
   );
 
   const dayList = (
-    <Card className="hidden lg:block p-3 bg-cream-2/70 overflow-hidden">
+    <Card className="p-3 bg-cream-2/70 overflow-hidden">
       <div className="flex items-center justify-between px-1 mb-2">
         <h3 className="font-serif text-[18px] text-ink">Trip Plan <span className="text-[13px] text-ink-3 font-sans">({trip.daysCount} Days)</span></h3>
       </div>
@@ -664,16 +664,18 @@ function Itinerary(ctx) {
       {header}
       {tabBar}
       {dayStrip}
-      <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr] xl:grid-cols-[230px_1fr_330px] gap-4 items-start">
-        <div className="hidden lg:block lg:sticky lg:top-[80px]">{dayList}</div>
-        <div className="min-w-0 xl:col-span-1">
+      {/* One column on phones, plan + map side by side on tablets, day list added on wide screens.
+          The day list is only sticky where it has a column to itself for the full height. */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_330px] xl:grid-cols-[230px_minmax(0,1fr)_330px] gap-4 items-start">
+        <div className="hidden xl:block xl:sticky xl:top-[80px]">{dayList}</div>
+        <div className="min-w-0">
           {tab === 'plan' && plan}
           {tab === 'route' && routeTab}
           {tab === 'stays' && staysTab}
           {tab === 'budget' && budgetTab}
           {tab === 'notes' && notesTab}
         </div>
-        <div className={`min-w-0 lg:col-span-2 xl:col-span-1 ${tab === 'plan' ? '' : 'hidden xl:block'}`}>{right}</div>
+        <div className={`min-w-0 ${tab === 'plan' ? '' : 'hidden lg:block'}`}>{right}</div>
       </div>
     </div>
   );

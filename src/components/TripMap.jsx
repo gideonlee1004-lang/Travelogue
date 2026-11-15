@@ -26,12 +26,13 @@ const overlaps = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
 
 function fittingLabels(items, zoomLevel) {
   const placed = items.map(it => ({ ...it, at: toPixels(it.position, zoomLevel) }));
-  const pinBoxes = placed.map(p => ({ l: p.at.x - 15, r: p.at.x + 15, t: p.at.y - 46, b: p.at.y + 4 }));
+  const pinBoxes = placed.map(p => ({ l: p.at.x - 17, r: p.at.x + 17, t: p.at.y - 48, b: p.at.y + 5 }));
   const kept = [];
   const visible = new Set();
   placed.forEach((p, i) => {
     const w = textWidth(p.text);
-    const box = { l: p.at.x - w / 2, r: p.at.x + w / 2, t: p.at.y + 5, b: p.at.y + 25 };
+    // a little wider and taller than the label itself, so near-misses count as collisions
+    const box = { l: p.at.x - w / 2 - 5, r: p.at.x + w / 2 + 5, t: p.at.y + 2, b: p.at.y + 28 };
     if (kept.some(k => overlaps(k, box))) return;
     if (pinBoxes.some((pin, j) => j !== i && overlaps(pin, box))) return;
     kept.push(box);
@@ -64,22 +65,29 @@ export function TripMap({
   const [zoomLevel, setZoomLevel] = useState(zoom);
   const mapRef = useRef(null);
   const onLoad = useCallback(m => { mapRef.current = m; setMap(m); }, []);
-  const onZoomChanged = useCallback(() => {
+  // The map component re-centres whenever it is handed a new `center` object, and callers
+  // build that object afresh on every render. Left alone, any re-render after zooming to
+  // the day's stops would drag the view back to the trip's centre. So the map only ever
+  // gets its starting centre; every later move goes through fit() / panTo().
+  const [startCenter] = useState(() => center || { lat: 35.68, lng: 139.76 });
+  // Read the zoom from the map itself, both when it changes and whenever it comes to rest.
+  const syncZoom = useCallback(() => {
     const z = mapRef.current?.getZoom?.();
-    if (typeof z === 'number') setZoomLevel(z);
+    if (typeof z === 'number') setZoomLevel(prev => (prev === z ? prev : z));
   }, []);
   const onUnmount = useCallback(() => setMap(null), []);
   const lastFit = useRef('');
 
-  // The same stay is usually pinned to several nights; draw it once.
+  // The same stay is usually pinned to several nights; draw it once. And when the hotel
+  // is also a stop that day, the stop's pin already marks it.
   const uniqueStays = useMemo(() => {
-    const seen = new Set();
+    const spot = o => `${Number(o.lat).toFixed(4)}|${Number(o.lng).toFixed(4)}`;
+    const seen = new Set(stops.filter(s => !s.isFlight && hasCoords(s)).map(spot));
     return stays.filter(s => {
       if (!hasCoords(s)) return false;
-      const key = `${s.name}|${Number(s.lat).toFixed(5)}|${Number(s.lng).toFixed(5)}`;
-      return seen.has(key) ? false : seen.add(key);
+      return seen.has(spot(s)) ? false : seen.add(spot(s));
     });
-  }, [stays]);
+  }, [stays, stops]);
 
   // What the map zooms to. With focus="ground", a flight does not drag the view out to
   // another continent: the map stays on the day's stops and the arc runs off the edge.
@@ -149,7 +157,7 @@ export function TripMap({
         <div className="absolute inset-0 flex items-center justify-center text-xs text-ink-3">Loading map…</div>
       ) : (
         <div className="absolute inset-0">
-          <GoogleMap mapContainerStyle={CONTAINER} center={center || { lat: 35.68, lng: 139.76 }} zoom={zoom} options={MAP_OPTIONS} onLoad={onLoad} onUnmount={onUnmount} onZoomChanged={onZoomChanged}>
+          <GoogleMap mapContainerStyle={CONTAINER} center={startCenter} zoom={zoom} options={MAP_OPTIONS} onLoad={onLoad} onUnmount={onUnmount} onZoomChanged={syncZoom} onIdle={syncZoom}>
             {lines.map((seg, i) => (
               <React.Fragment key={`seg_${i}_${seg.road ? 'r' : 's'}_${seg.path.length}`}>
                 {seg.road && <PolylineF path={seg.path} options={ROAD_CASING} />}
