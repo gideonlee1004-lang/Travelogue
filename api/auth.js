@@ -1,10 +1,11 @@
-// POST /api/auth  { action: 'register' | 'login' | 'logout' | 'me', email, password, name }
+// POST /api/auth  { action: 'register' | 'login' | 'logout' | 'me' | 'updateProfile', email, password, name, profile }
 import crypto from 'node:crypto';
 import {
   StoreError,
   ConflictError,
   readJson,
   writeJson,
+  updateJson,
   userPathFor,
   hashPassword,
   verifyPassword,
@@ -13,6 +14,7 @@ import {
   readSession,
   send
 } from './_lib.js';
+import { cleanProfilePatch, applyProfilePatch } from './_profile.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed' });
@@ -37,6 +39,22 @@ export default async function handler(req, res) {
         return send(res, 401, { error: 'Invalid Account or Password' });
       }
       return send(res, 200, { user: publicUser(record) });
+    }
+
+    // Photo, bio, interests and travel preferences live on the account so they follow
+    // the user to every device.
+    if (action === 'updateProfile') {
+      const session = readSession(req);
+      if (!session) return send(res, 401, { error: 'Not signed in' });
+      const patch = cleanProfilePatch(body.profile);
+      if (!patch) return send(res, 400, { error: 'That profile change could not be saved. If it was a photo, try a smaller image.' });
+      const { value } = await updateJson(userPathFor(session.email), record =>
+        record ? { ...record, profile: applyProfilePatch(record.profile, patch) } : undefined);
+      if (!value) {
+        clearSession(req, res);
+        return send(res, 401, { error: 'Not signed in' });
+      }
+      return send(res, 200, { user: publicUser(value) });
     }
 
     const email = String(body.email || '').trim().toLowerCase();
@@ -84,13 +102,14 @@ export default async function handler(req, res) {
     return send(res, 400, { error: 'Unknown action' });
   } catch (err) {
     if (err instanceof StoreError) return send(res, 503, { error: err.message });
+    if (err instanceof ConflictError) return send(res, 409, { error: err.message });
     console.error(err);
     return send(res, 500, { error: 'Unexpected server error.' });
   }
 }
 
 function publicUser(u) {
-  return { id: u.id, email: u.email, name: u.name };
+  return { id: u.id, email: u.email, name: u.name, profile: u.profile || null };
 }
 
 function safeParse(s) {

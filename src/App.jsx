@@ -59,7 +59,7 @@ async function apiRequest(url, options = {}) {
       headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
     });
   } catch (err) {
-    const e = new Error('Unable to connect to your account. Please check your connection and try again.');
+    const e = new Error('Unable to reach Travelogue. Check your connection and try again.');
     e.network = true;
     throw e;
   }
@@ -72,7 +72,7 @@ async function apiRequest(url, options = {}) {
   }
 
   if (!response.ok) {
-    const e = new Error((data?.error || `Unable to connect to your account (HTTP ${response.status}).`).replace(/MongoDB Atlas|AeroAPI/gi, 'service'));
+    const e = new Error(data?.error || `Something went wrong on the server (HTTP ${response.status}). Please try again.`);
     e.status = response.status;
     throw e;
   }
@@ -216,18 +216,7 @@ export default function App() {
 
   // User Authentication & Database Account State (session lives in an HttpOnly cookie)
   const [currentUser, setCurrentUser] = useState(null);
-  const [profileAvatar, setProfileAvatar] = useState(null);
-  useEffect(() => {
-    const readAvatar = () => {
-      try { setProfileAvatar(currentUser?.id ? JSON.parse(localStorage.getItem(`tl_profile_${currentUser.id}`) || '{}').avatar || null : null); }
-      catch { setProfileAvatar(null); }
-    };
-    readAvatar();
-    const update = event => { if (!event.detail?.userId || String(event.detail.userId) === String(currentUser?.id)) readAvatar(); };
-    window.addEventListener('travelogue-profile-updated', update);
-    window.addEventListener('storage', readAvatar);
-    return () => { window.removeEventListener('travelogue-profile-updated', update); window.removeEventListener('storage', readAvatar); };
-  }, [currentUser?.id]);
+  const userId = currentUser?.id || null;
   const [authChecking, setAuthChecking] = useState(true);
   const [authSubmitting, setAuthSubmitting] = useState(false);
 
@@ -268,7 +257,7 @@ export default function App() {
   const [joinBusy, setJoinBusy] = useState(false);
   const [joinError, setJoinError] = useState('');
 
-  // Restore session on page load (verifies against MongoDB Atlas)
+  // Restore session on page load (verified by the server)
   useEffect(() => {
     let active = true;
     authApi({ action: 'me' })
@@ -304,7 +293,7 @@ export default function App() {
       })
       .finally(() => { if (active) setIsDbSyncing(false); });
     return () => { active = false; };
-  }, [currentUser, reloadKey]);
+  }, [userId, reloadKey]);
 
   // Changes to different saved places, stays, days or stop fields merge on the server.
   // Actual conflicting edits are shown to the user rather than overwritten silently.
@@ -373,7 +362,7 @@ export default function App() {
       }
     }, 450);
     return () => clearTimeout(timer);
-  }, [trips, currentUser, tripsLoaded, syncPulse, collabConflict]);
+  }, [trips, userId, tripsLoaded, syncPulse, collabConflict]);
 
   // Every 6 seconds, check shared revisions. Only changed trips cross the network.
   // Unchanged polls do not trigger any React updates or JSON comparisons.
@@ -449,7 +438,7 @@ export default function App() {
       clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [currentUser, tripsLoaded]);
+  }, [userId, tripsLoaded]);
 
   const [activeTripId, setActiveTripId] = useState(null);
   const [activeDay, setActiveDay] = useState(null);
@@ -535,6 +524,7 @@ export default function App() {
     lat: null,
     lng: null,
     note: '',
+    checkIn: '',
     rating: null,
     priceInfo: '',
     fromDay: 1,
@@ -593,12 +583,62 @@ export default function App() {
       setAuthForm({ email: '', password: '', name: '' });
       setCurrentUser(data.user);
     } catch (err) {
-      // Includes "unable to connect to MongoDB Atlas" - account creation is refused if the database is down
+      // Includes connection failures - account creation is refused if the database is down
       setAuthError(err.message);
     } finally {
       setAuthSubmitting(false);
     }
   };
+
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  // Shows the change straight away, then saves it; a failed save is rolled back.
+  const saveProfile = useCallback(async (patch) => {
+    let before = null;
+    setProfileError('');
+    setProfileSaving(true);
+    setCurrentUser(u => {
+      if (!u) return u;
+      before = u.profile || null;
+      const base = u.profile || {};
+      return {
+        ...u,
+        profile: {
+          ...base, ...patch,
+          ...(patch.prefs ? { prefs: { ...(base.prefs || {}), ...patch.prefs } } : {}),
+          ...(patch.notifications ? { notifications: { ...(base.notifications || {}), ...patch.notifications } } : {})
+        }
+      };
+    });
+    try {
+      await authApi({ action: 'updateProfile', profile: patch });
+      return true;
+    } catch (err) {
+      setCurrentUser(u => (u ? { ...u, profile: before } : u));
+      setProfileError(err.message || 'That change could not be saved.');
+      return false;
+    } finally {
+      setProfileSaving(false);
+    }
+  }, []);
+
+  // Profiles used to live only in this browser. Move an existing one to the account once.
+  useEffect(() => {
+    if (!currentUser || currentUser.profile) return;
+    const key = `tl_profile_${currentUser.id}`;
+    try {
+      const old = JSON.parse(localStorage.getItem(key) || 'null');
+      if (!old || typeof old !== 'object') return;
+      const { interests: oldInterestText, ...prefs } = old.prefs || {};
+      saveProfile({
+        ...(typeof old.bio === 'string' ? { bio: old.bio } : {}),
+        ...(Array.isArray(old.interests) ? { interests: old.interests } : {}),
+        ...(Object.keys(prefs).length ? { prefs } : {}),
+        ...(old.notifications ? { notifications: old.notifications } : {})
+      }).then(ok => { if (ok) localStorage.removeItem(key); });
+    } catch { /* nothing to move */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
   const handleLogout = async () => {
     try {
@@ -978,6 +1018,7 @@ export default function App() {
       lat: stayForm.lat !== null ? parseFloat(stayForm.lat) : activeTrip.center[0],
       lng: stayForm.lng !== null ? parseFloat(stayForm.lng) : activeTrip.center[1],
       note: stayForm.note || '',
+      checkIn: stayForm.checkIn || '',
       rating: stayForm.rating || null,
       priceInfo: stayForm.priceInfo || '',
       googleId: stayForm.googleId || null,
@@ -1002,6 +1043,7 @@ export default function App() {
       lat: null,
       lng: null,
       note: '',
+      checkIn: '',
       rating: null,
       priceInfo: '',
       fromDay: 1,
@@ -1188,7 +1230,7 @@ export default function App() {
       return;
     }
     if (!selected.departureTime) {
-      setFlightLookupError('The flight service did not return a local departure time. Please try again.');
+      setFlightLookupError('No local departure time was returned for this flight. Please try the lookup again.');
       return;
     }
 
@@ -1300,7 +1342,7 @@ export default function App() {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
     };
-  }, [activeTripId, currentUser, tripsLoaded, refreshSavedFlight]);
+  }, [activeTripId, userId, tripsLoaded, refreshSavedFlight]);
 
   const handleOpenInGoogleMaps = (stop) => {
     let mapsUrl = '';
@@ -1491,18 +1533,31 @@ export default function App() {
   };
 
   const openStayModal = (day, currentStay) => {
+    // Editing a stay that spans several nights edits all of those nights together.
+    let fromDay = day, toDay = day;
+    if (currentStay && activeTrip) {
+      const same = d => {
+        const other = activeTrip.staysByDay?.[d];
+        return !!other && other.name === currentStay.name && (other.address || '') === (currentStay.address || '');
+      };
+      if (same(day)) {
+        while (fromDay > 1 && same(fromDay - 1)) fromDay -= 1;
+        while (toDay < activeTrip.daysCount && same(toDay + 1)) toDay += 1;
+      }
+    }
     setStayForm({
       name: currentStay?.name || '',
       address: currentStay?.address || '',
       lat: currentStay?.lat ?? null,
       lng: currentStay?.lng ?? null,
       note: currentStay?.note || '',
+      checkIn: currentStay?.checkIn || '',
       rating: currentStay?.rating || null,
       priceInfo: currentStay?.priceInfo || '',
       googleId: currentStay?.googleId || null,
       photoUrl: currentStay?.photoUrl || null,
-      fromDay: day,
-      toDay: day
+      fromDay,
+      toDay
     });
     setShowStayModal(true);
   };
@@ -1531,7 +1586,7 @@ export default function App() {
   if (authChecking) {
     return (
       <div className="min-h-screen bg-cream flex items-center justify-center text-xs text-ink-3">
-        Connecting to your account...
+        Opening Travelogue…
       </div>
     );
   }
@@ -1633,7 +1688,7 @@ export default function App() {
       <div className="min-h-screen bg-cream text-ink flex flex-col justify-center items-center px-4 font-sans">
         <div className="w-full max-w-md bg-paper border border-red-200 rounded-2xl p-6 space-y-4 shadow-sm text-center">
           <AlertTriangle className="w-8 h-8 mx-auto text-red-500" />
-          <h2 className="font-serif text-xl">Unable to connect to your account</h2>
+          <h2 className="font-serif text-xl">Your trips could not be loaded</h2>
           <p className="text-xs text-ink-2 break-words">{dbError}</p>
           <div className="flex items-center justify-center space-x-2 text-xs">
             <button
@@ -1657,7 +1712,7 @@ export default function App() {
 
   const pageCtx = {
     user: currentUser, trips, activeTrip, activeTripId, setActiveTripId, activeDay, setActiveDay, sharedMeta,
-    isLoaded, loadError, navigate, isDbSyncing, dbError,
+    isLoaded, loadError, navigate, isDbSyncing, dbError, saveProfile, profileSaving, profileError,
     filterCategory, setFilterCategory, searchQuery, setSearchQuery, filteredPlaces,
     recommendations, isRecLoading, recCategory, setRecCategory, fetchRecommendations,
     handleAddToDay, handleDeleteSavedPlace, handleAddRecommendedToSaved,
@@ -1672,9 +1727,9 @@ export default function App() {
   const notificationCount = (collabConflict ? 1 : 0) + (dbError ? 1 : 0) + Object.values(flightRefreshErrors).filter(Boolean).length;
 
   return (
-    <div className="min-h-screen bg-cream text-ink flex flex-col font-sans pb-[calc(70px+env(safe-area-inset-bottom))] lg:pb-0 overflow-x-clip">
+    <div className="min-h-screen bg-cream text-ink flex flex-col font-sans tl-page-bottom">
       <style>{PLACE_AUTOCOMPLETE_CSS}</style>
-      <TopNav page={page} onNavigate={navigate} user={currentUser} avatar={profileAvatar} notifications={notificationCount}
+      <TopNav page={page} onNavigate={navigate} user={currentUser} notifications={notificationCount}
         onBell={() => navigate('flights')} onAvatar={() => navigate('profile')} />
 
       {dbError && (
@@ -1698,9 +1753,9 @@ export default function App() {
         <Page {...pageCtx} />
       </div>
 
-      <footer className="max-w-[1400px] mx-auto w-full px-6 py-6 text-[11px] text-ink-3 flex items-center justify-between">
+      <footer className="max-w-[1400px] mx-auto w-full px-4 sm:px-6 py-5 text-[11px] text-ink-3 flex items-center justify-between gap-3">
         <span className="flex items-center gap-2"><BrandMark className="w-5 h-5" /> Travelogue · by Li Ze Ying</span>
-        <span className="flex items-center gap-1.5"><Database className={`w-3.5 h-3.5 ${dbError ? 'text-red-500' : isDbSyncing ? 'text-amber-500 animate-spin' : 'text-sage'}`} />{dbError ? 'Sync error' : isDbSyncing ? 'Syncing…' : 'Synced'}</span>
+        <span className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${dbError ? 'bg-red-500' : isDbSyncing ? 'bg-amber-500' : 'bg-sage'}`} />{dbError ? 'Not saved' : isDbSyncing ? 'Saving…' : 'All changes saved'}</span>
       </footer>
 
       {/* Invitation link: guests join using their own signed-in account. */}
@@ -1723,7 +1778,7 @@ export default function App() {
       {/* Sharing and collaborator management */}
       {showShareModal && activeTrip && (
         <div className="fixed inset-0 z-[60] bg-ink/40 backdrop-blur-[2px] flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-cream border border-line rounded-xl shadow-xl p-5 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-5">
+          <div className="bg-cream border border-line rounded-xl shadow-xl p-5 sm:p-6 w-full max-w-lg max-h-[90dvh] overflow-y-auto space-y-5">
             <div className="flex justify-between items-center border-b border-line pb-3">
               <div className="flex items-center gap-2"><Users className="w-5 h-5" /><h3 className="font-serif text-lg">Trip collaboration</h3></div>
               <button onClick={() => setShowShareModal(false)} className="p-1.5 rounded hover:bg-cream-2 cursor-pointer" aria-label="Close"><X className="w-4 h-4" /></button>
@@ -1783,7 +1838,7 @@ export default function App() {
         <div className="fixed inset-0 bg-ink/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <form
             onSubmit={handleSaveEditedDates}
-            className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90dvh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center space-x-2">
@@ -1860,7 +1915,7 @@ export default function App() {
         <div className="fixed inset-0 bg-ink/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <form
             onSubmit={handleSetStayForDays}
-            className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90dvh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center space-x-2">
@@ -1923,7 +1978,7 @@ export default function App() {
                   <input
                     type="text"
                     disabled
-                    placeholder="Loading Google Places..."
+                    placeholder="Loading place search…"
                     className={FIELD_DISABLED}
                   />
                 )}
@@ -1981,10 +2036,20 @@ export default function App() {
               </div>
 
               <div>
+                <label className={LABEL}>Check-in from (optional)</label>
+                <input
+                  type="time"
+                  value={stayForm.checkIn || ''}
+                  onChange={(e) => setStayForm(prev => ({ ...prev, checkIn: e.target.value }))}
+                  className={FIELD}
+                />
+              </div>
+
+              <div>
                 <label className={LABEL}>Note / Confirmation Ref</label>
                 <input
                   type="text"
-                  placeholder="e.g. Booking Ref #12345, check-in 3 PM"
+                  placeholder="e.g. Booking ref 12345, late arrival arranged"
                   value={stayForm.note}
                   onChange={(e) => setStayForm(prev => ({ ...prev, note: e.target.value }))}
                   className={FIELD}
@@ -2016,7 +2081,7 @@ export default function App() {
         <div className="fixed inset-0 bg-ink/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <form
             onSubmit={handleAddDirectStop}
-            className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90dvh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center space-x-2">
@@ -2044,7 +2109,7 @@ export default function App() {
                   <input
                     type="text"
                     disabled
-                    placeholder="Loading Google Places..."
+                    placeholder="Loading place search…"
                     className={FIELD_DISABLED}
                   />
                 )}
@@ -2109,7 +2174,7 @@ export default function App() {
         <div className="fixed inset-0 bg-ink/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <form
             onSubmit={handleSaveEditedStop}
-            className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90dvh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center space-x-2">
@@ -2137,7 +2202,7 @@ export default function App() {
                   <input
                     type="text"
                     disabled
-                    placeholder="Loading Google Places..."
+                    placeholder="Loading place search…"
                     className={FIELD_DISABLED}
                   />
                 )}
@@ -2208,10 +2273,10 @@ export default function App() {
         </div>
       )}
 
-      {/* Add Flight Modal — flight number and departure date only; airports/times come from AeroAPI. */}
+      {/* Add Flight Modal — flight number and departure date only; airports/times come from the schedule lookup. */}
       {showAddFlightModal && activeTrip && (
         <div className="fixed inset-0 bg-ink/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90dvh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center gap-2">
                 <Plane className="w-5 h-5 text-sky-600" /> Add Flight
@@ -2238,7 +2303,7 @@ export default function App() {
               <button type="submit" disabled={flightLookupBusy}
                 className="w-full flex justify-center items-center gap-2 rounded-full bg-sky-700 text-white text-xs font-semibold py-2.5 disabled:opacity-50 cursor-pointer">
                 {flightLookupBusy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-                {flightLookupBusy ? 'Searching flights…' : 'Find scheduled flight'}
+                {flightLookupBusy ? 'Searching schedules…' : 'Find scheduled flight'}
               </button>
             </form>
 
@@ -2246,7 +2311,7 @@ export default function App() {
 
             {flightMatches.length > 0 && (
               <div className="space-y-3">
-                <label className={LABEL}>FlightAware schedule {flightMatches.length > 1 ? '— select the matching service' : 'found'}</label>
+                <label className={LABEL}>{flightMatches.length > 1 ? 'Several flights match. Select yours.' : 'Scheduled flight found'}</label>
                 <div className="space-y-2 max-h-56 overflow-y-auto">
                   {flightMatches.map((flight, idx) => (
                     <label key={`${flight.scheduledOut}_${flight.originCode}_${idx}`}
@@ -2291,7 +2356,7 @@ export default function App() {
         <div className="fixed inset-0 bg-ink/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <form
             onSubmit={handleCreatePlace}
-            className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90dvh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center space-x-2">
@@ -2326,14 +2391,14 @@ export default function App() {
                 <label className={LABEL}>Search Location</label>
                 {isLoaded ? (
                   <PlaceAutocomplete
-                    placeholder="Search for a place..."
+                    placeholder="Search for a place…"
                     onPlaceSelected={handleCustomPlaceSelected}
                   />
                 ) : (
                   <input
                     type="text"
                     disabled
-                    placeholder="Loading Google Places..."
+                    placeholder="Loading place search…"
                     className={FIELD_DISABLED}
                   />
                 )}
@@ -2398,7 +2463,7 @@ export default function App() {
         <div className="fixed inset-0 bg-ink/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <form
             onSubmit={handleCreateTrip}
-            className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+            className="bg-cream border border-line rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[90dvh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-line pb-3">
               <h3 className="font-serif text-base sm:text-lg font-normal flex items-center space-x-2">
@@ -2426,7 +2491,7 @@ export default function App() {
                   <input
                     type="text"
                     disabled
-                    placeholder="Loading Google Places..."
+                    placeholder="Loading place search…"
                     className={FIELD_DISABLED}
                   />
                 )}

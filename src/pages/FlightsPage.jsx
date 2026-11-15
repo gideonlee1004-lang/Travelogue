@@ -13,27 +13,28 @@ function FlightCard({ flight, trip, day, ctx }) {
   };
   return (
     <Card className="p-4 sm:p-5">
-      <div className="flex items-start gap-4">
-        <IconBadge icon={Plane} tone="sky" className="w-11 h-11 rounded-2xl" />
+      <div className="sm:flex sm:items-start sm:gap-4">
+        <IconBadge icon={Plane} tone="sky" className="hidden sm:flex w-11 h-11 rounded-2xl" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
+            <Plane className="sm:hidden w-5 h-5 text-[#5a7386]" strokeWidth={1.8} />
             <h3 className="font-serif text-[22px] text-ink leading-tight">{flight.flightNumber}</h3>
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-cream-2 border border-line text-ink-2">{trip.name} · Day {day}</span>
             {flight.flightStatus && <span className={`text-[11px] px-2 py-0.5 rounded-full border ${flight.cancelled ? 'bg-red-50 border-red-200 text-red-700' : 'bg-sage-soft border-sage/30 text-sage-deep'}`}>{flight.cancelled ? 'Cancelled' : flight.flightStatus}</span>}
             {flight.gateChangedFrom && <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 inline-flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Gate changed from {flight.gateChangedFrom}</span>}
           </div>
-          <p className="text-[12px] text-ink-3 mt-0.5 flex items-center gap-1.5"><CalendarDays className="w-3.5 h-3.5" />{formatDayDate(trip.startDate, day, true)}{flight.airline ? ` · ${flight.airline}` : ''}</p>
+          <p className="text-[12px] text-ink-3 mt-1 flex items-center gap-1.5"><CalendarDays className="w-3.5 h-3.5 shrink-0" />{formatDayDate(trip.startDate, day, true)}{flight.airline ? ` · ${flight.airline}` : ''}</p>
 
-          <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-            <div>
+          <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-3">
+            <div className="min-w-0">
               <p className="font-serif text-[30px] leading-none text-ink">{flight.originCode || '—'}</p>
               <p className="text-[12px] text-ink-2 truncate mt-1">{flight.departureAirport || 'Departure'}</p>
               <p className="text-[13px] font-medium text-ink mt-0.5">{flight.departureTime || flight.time || '--:--'}{flight.estimatedDepartureTime && fmt(flight.estimatedDepartureTime) !== (flight.departureTime || '') ? <span className="text-amber-700 text-[11px] ml-1">est. {fmt(flight.estimatedDepartureTime)}</span> : null}</p>
             </div>
             <div className="flex flex-col items-center text-ink-3">
-              <span className="w-8 sm:w-24 border-t border-dashed border-line-2 relative"><Plane className="w-4 h-4 absolute -top-2 left-1/2 -translate-x-1/2 text-[#4f6d8a] bg-paper" /></span>
+              <span className="w-12 sm:w-24 border-t border-dashed border-line-2 relative"><Plane className="w-4 h-4 absolute -top-2 left-1/2 -translate-x-1/2 text-[#4f6d8a] bg-paper" /></span>
             </div>
-            <div className="text-right">
+            <div className="text-right min-w-0">
               <p className="font-serif text-[30px] leading-none text-ink">{flight.destinationCode || '—'}</p>
               <p className="text-[12px] text-ink-2 truncate mt-1">{flight.arrivalAirport || 'Arrival'}</p>
               <p className="text-[13px] font-medium text-ink mt-0.5">{flight.arrivalTime || '--:--'}</p>
@@ -55,7 +56,7 @@ function FlightCard({ flight, trip, day, ctx }) {
           </div>
 
           <div className="mt-3 flex items-center gap-3 flex-wrap text-[11px] text-ink-3">
-            <span>{flight.lastChecked ? `Last checked ${new Date(flight.lastChecked).toLocaleString()}` : 'Live status not yet checked'}</span>
+            <span>{flight.lastChecked ? `Last checked ${new Date(flight.lastChecked).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}` : 'Live status not checked yet'}</span>
             {flight.scheduledOut && (
               <button onClick={() => ctx.refreshSavedFlight(trip.id, day, flight, true)} disabled={busy} className="inline-flex items-center gap-1 text-[#4f6d8a] font-medium disabled:opacity-50 cursor-pointer">
                 <RefreshCw className={`w-3 h-3 ${busy ? 'animate-spin' : ''}`} />Refresh
@@ -86,13 +87,13 @@ export default function FlightsPage(ctx) {
       </Hero>
 
       {flights.length > 0 && (
-        <Card className="overflow-hidden h-[260px] relative">
+        <Card className="overflow-hidden h-[220px] sm:h-[260px] relative">
           <TripMap isLoaded={isLoaded} loadError={loadError} className="absolute inset-0" stops={flights.map(f => f.flight)} route={false} fitKey="flights" zoom={4} center={{ lat: 20, lng: 100 }} />
         </Card>
       )}
 
       {flights.length === 0 ? (
-        <EmptyNote action={activeTrip ? 'Add your first flight' : undefined} onAction={ctx.handleOpenAddFlight}>No flights saved yet. Add a flight number and date to look up its schedule.</EmptyNote>
+        <EmptyNote action={activeTrip ? 'Add your first flight' : undefined} onAction={ctx.handleOpenAddFlight}>No flights saved yet. Add a flight number and date, and the schedule is filled in for you.</EmptyNote>
       ) : (
         <>
           {activeTrip && (

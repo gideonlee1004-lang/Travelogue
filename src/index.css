@@ -99,16 +99,34 @@ h1, h2, h3, .font-serif { font-family: var(--font-serif); }
 @keyframes tl-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .tl-fade { animation: tl-fade 0.25s ease-out both; }
 
-/* Compact-screen refinements; desktop design stays unchanged. */
-html, body, #root { max-width: 100%; }
-@media (max-width: 767px) {
-  body { overflow-x: clip; }
-  .tl-card { min-width: 0; }
-  button, input, textarea, select { touch-action: manipulation; }
-  input, textarea, select { max-width: 100%; }
-  .tl-mobile-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
-  .tl-mobile-full { width: 100%; }
+/* name under a map pin */
+.tl-pin-label {
+  background: rgba(255, 253, 248, 0.94);
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  padding: 1px 7px 2px;
+  box-shadow: 0 1px 2px rgba(60, 50, 30, 0.12);
+  white-space: nowrap;
+  line-height: 1.35;
 }
-@media (max-width: 390px) {
-  .tl-mobile-tight { gap: 0.35rem; }
+
+/* phones: keep the bottom tab bar clear of the home indicator */
+.tl-safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.tl-page-bottom { padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px)); }
+@media (min-width: 1024px) { .tl-page-bottom { padding-bottom: 0; } }
+
+/* horizontal strips that scroll without showing a scrollbar */
+.tl-strip { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.tl-strip::-webkit-scrollbar { display: none; }
+
+/* inputs must be 16px on phones or iOS zooms the page when they are focused */
+@media (max-width: 639px) {
+  input, select, textarea { font-size: 16px; }
+}
+
+button:focus-visible, a:focus-visible, label:focus-within > select { outline: 2px solid var(--color-sage); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .tl-fade { animation: none; }
 }

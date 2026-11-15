@@ -77,7 +77,7 @@ export default function SavedPlacesPage(ctx) {
   return (
     <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-5 grid grid-cols-1 lg:grid-cols-[250px_1fr] gap-6">
       {/* ---------- Sidebar ---------- */}
-      <aside className="space-y-4 lg:sticky lg:top-[80px] self-start">
+      <aside className="hidden lg:block space-y-4 lg:sticky lg:top-[80px] self-start">
         <Card className="p-4 pb-0 overflow-hidden bg-cream-2/70">
           <div className="flex items-center justify-between mb-2">
             <h2 className="font-serif text-[20px] text-ink">My Collections</h2>
@@ -119,13 +119,16 @@ export default function SavedPlacesPage(ctx) {
 
         {/* Search + chips */}
         <div className="flex flex-col xl:flex-row gap-3 xl:items-center">
-          <div className="relative flex-1 max-w-[460px]">
-            <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-ink-3" />
-            <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search your saved places…"
-              className="w-full h-11 pl-11 pr-10 rounded-full bg-paper border border-line text-[14px] text-ink placeholder:text-ink-3 focus:outline-none focus:border-sage" />
-            <SlidersHorizontal className="w-4 h-4 absolute right-4 top-1/2 -translate-y-1/2 text-ink-3" />
+          <div className="flex gap-2 flex-1 max-w-[520px]">
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-ink-3" />
+              <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search your saved places…" aria-label="Search your saved places"
+                className="w-full h-11 pl-11 pr-4 rounded-full bg-paper border border-line text-[14px] text-ink placeholder:text-ink-3 focus:outline-none focus:border-sage" />
+            </div>
+            {/* the collections sidebar (and its add button) is hidden on phones */}
+            <button onClick={openNewPlace} className="lg:hidden shrink-0 h-11 px-4 rounded-full bg-sage-deep text-white text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer"><Plus className="w-4 h-4" />Add</button>
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="flex gap-2 tl-strip -mx-4 px-4 sm:mx-0 sm:px-0 pb-1">
             <Chip active={filterCategory === 'ALL'} icon={Bookmark} onClick={() => setFilterCategory('ALL')}>All Places</Chip>
             {CATEGORY_ORDER.map(c => {
               const m = CATEGORIES[c];
@@ -136,7 +139,7 @@ export default function SavedPlacesPage(ctx) {
 
         {/* Map + quick actions */}
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-4">
-          <Card className="overflow-hidden relative h-[300px]">
+          <Card className="overflow-hidden relative h-[260px] sm:h-[300px]">
             <div className="absolute top-3 left-3 z-10 flex rounded-full bg-paper/95 border border-line p-1 shadow-sm">
               <button onClick={() => setView('map')} className={`h-8 px-3 rounded-full text-[12px] flex items-center gap-1.5 cursor-pointer ${view === 'map' ? 'bg-sage-soft font-medium' : 'text-ink-2'}`}><MapIcon className="w-3.5 h-3.5" />Map</button>
               <button onClick={() => setView('list')} className={`h-8 px-3 rounded-full text-[12px] flex items-center gap-1.5 cursor-pointer ${view === 'list' ? 'bg-sage-soft font-medium' : 'text-ink-2'}`}><List className="w-3.5 h-3.5" />List</button>
@@ -220,17 +223,17 @@ export default function SavedPlacesPage(ctx) {
           );
         })}
 
-        {/* Google Maps suggestions */}
+        {/* Suggestions near the trip */}
         <section>
-          <SectionTitle icon={Sparkles} title="Discover nearby" subtitle={`Top-rated spots near ${activeTrip.name}`}
+          <SectionTitle icon={Sparkles} title="Discover nearby" subtitle={`Top-rated spots for ${activeTrip.name}`}
             action={isRecLoading ? 'Refreshing…' : 'Refresh'} onAction={fetchRecommendations} />
-          <div className="flex gap-2 overflow-x-auto pb-3">
+          <div className="flex gap-2 tl-strip -mx-4 px-4 sm:mx-0 sm:px-0 pb-3">
             {CATEGORY_ORDER.map(c => <Chip key={c} active={recCategory === c} icon={CATEGORIES[c].Icon} onClick={() => setRecCategory(c)}>{CATEGORIES[c].label}</Chip>)}
           </div>
           {isRecLoading ? (
             <div className="rounded-2xl border border-dashed border-line-2 p-8 text-center text-[13px] text-ink-3 flex items-center justify-center gap-2"><RefreshCw className="w-4 h-4 animate-spin" />Finding places…</div>
           ) : recommendations.length === 0 ? (
-            <EmptyNote>No suggestions found right now. Try another category or check again later.</EmptyNote>
+            <EmptyNote action="Try again" onAction={fetchRecommendations}>No suggestions right now. Try another category, or refresh in a moment.</EmptyNote>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               {recommendations.map((rec, i) => {

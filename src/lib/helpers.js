@@ -1,6 +1,6 @@
-// Shared helpers: dates, travel time (Google Routes v2), opening hours.
+// Shared helpers: dates, travel time and road geometry, opening hours.
 import { useEffect, useState } from 'react';
-import { Footprints, Bus, Car } from 'lucide-react';
+import { Footprints, TrainFront, Car } from 'lucide-react';
 
 // Calculate quadratic curved points for flight path arc
 export function getCurvedPath(dep, arr, numPoints = 50) {
@@ -71,14 +71,13 @@ export function getGroupedStays(staysByDay, daysCount) {
   }));
 }
 
-// ---- Travel time (Google Routes v2 REST API) ----
+// ---- Travel time and road geometry for one leg ----
 export const TRAVEL_MODES = [
-  { key: 'WALK', label: 'Walk', Icon: Footprints },
-  { key: 'TRANSIT', label: 'Transit', Icon: Bus },
-  { key: 'DRIVE', label: 'Car', Icon: Car }
+  { key: 'WALK', label: 'Walk', verb: 'on foot', gmaps: 'walking', Icon: Footprints },
+  { key: 'TRANSIT', label: 'Transit', verb: 'by train or bus', gmaps: 'transit', Icon: TrainFront },
+  { key: 'DRIVE', label: 'Car', verb: 'by car', gmaps: 'driving', Icon: Car }
 ];
-
-export const travelCache = new Map();
+export const modeByKey = key => TRAVEL_MODES.find(m => m.key === key) || TRAVEL_MODES[2];
 
 export function formatDuration(seconds) {
   if (seconds == null) return '–';
@@ -94,67 +93,128 @@ export function formatDistance(meters) {
   return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`;
 }
 
-export async function fetchTravel(from, to, mode, departure) {
-  const key = `${from.lat},${from.lng}|${to.lat},${to.lng}|${mode.key}|${mode.key === 'TRANSIT' && departure ? departure.getTime() : ''}`;
-  if (travelCache.has(key)) return travelCache.get(key);
-
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-  if (!apiKey) return null;
-
-  const modeMap = {
-    WALK: 'WALK',
-    TRANSIT: 'TRANSIT',
-    DRIVE: 'DRIVE'
-  };
-
-  try {
-    const body = {
-      origin: { location: { latLng: { latitude: Number(from.lat), longitude: Number(from.lng) } } },
-      destination: { location: { latLng: { latitude: Number(to.lat), longitude: Number(to.lng) } } },
-      travelMode: modeMap[mode.key] || 'DRIVE',
-      ...(mode.key === 'DRIVE' ? { polylineQuality: 'HIGH_QUALITY' } : {})
-    };
-
-    if (mode.key === 'TRANSIT' && departure) {
-      body.departureTime = departure.toISOString();
+// Standard encoded-polyline decoder (precision 5) → [{ lat, lng }]
+export function decodePolyline(encoded) {
+  if (!encoded) return [];
+  const points = [];
+  let index = 0, lat = 0, lng = 0;
+  while (index < encoded.length) {
+    for (const axis of ['lat', 'lng']) {
+      let result = 0, shift = 0, byte;
+      do {
+        byte = encoded.charCodeAt(index++) - 63;
+        result |= (byte & 0x1f) << shift;
+        shift += 5;
+      } while (byte >= 0x20 && index < encoded.length);
+      const delta = result & 1 ? ~(result >> 1) : result >> 1;
+      if (axis === 'lat') lat += delta; else lng += delta;
     }
-
-    const response = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': apiKey,
-        'X-Goog-FieldMask': mode.key === 'DRIVE' ? 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline' : 'routes.duration,routes.distanceMeters'
-      },
-      body: JSON.stringify(body)
-    });
-
-    const data = await response.json();
-    const route = data.routes?.[0];
-
-    let result = null;
-    if (route) {
-      const seconds = parseInt(route.duration?.replace('s', '') || '0', 10);
-      const meters = route.distanceMeters || 0;
-      result = { seconds, meters, ...(mode.key === 'DRIVE' && route.polyline?.encodedPolyline ? { encodedPolyline: route.polyline.encodedPolyline } : {}) };
-    }
-
-    travelCache.set(key, result);
-    return result;
-  } catch (e) {
-    console.error('Routes API call failed:', e);
-    travelCache.set(key, null);
-    return null;
+    points.push({ lat: lat / 1e5, lng: lng / 1e5 });
   }
+  return points;
 }
 
+// Results are kept for a week on this device so reopening a day does not look
+// every leg up again. Values: { seconds, meters, polyline } or null (no route).
+const TRAVEL_STORE = 'tl_travel_v1';
+const TRAVEL_TTL = 7 * 24 * 60 * 60 * 1000;
+const TRAVEL_MAX = 240;
+export const travelCache = new Map(); // key -> Promise<result|null>
+let travelStore = null;
+
+function loadTravelStore() {
+  if (travelStore) return travelStore;
+  travelStore = {};
+  try {
+    const raw = JSON.parse(localStorage.getItem(TRAVEL_STORE) || '{}');
+    const now = Date.now();
+    for (const [k, v] of Object.entries(raw)) if (v && now - v.t < TRAVEL_TTL) travelStore[k] = v;
+  } catch { /* storage unavailable */ }
+  return travelStore;
+}
+
+function rememberTravel(key, result) {
+  const store = loadTravelStore();
+  store[key] = { t: Date.now(), r: result };
+  const keys = Object.keys(store);
+  if (keys.length > TRAVEL_MAX) {
+    keys.sort((x, y) => store[x].t - store[y].t).slice(0, keys.length - TRAVEL_MAX).forEach(k => delete store[k]);
+  }
+  try { localStorage.setItem(TRAVEL_STORE, JSON.stringify(store)); } catch { /* full or unavailable */ }
+}
+
+const coordKey = p => `${Number(p.lat).toFixed(5)},${Number(p.lng).toFixed(5)}`;
+
+export function fetchTravel(from, to, mode, departure) {
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  if (!apiKey || !from || !to) return Promise.resolve(null);
+  // Only public transport depends on the time of day.
+  const when = mode.key === 'TRANSIT' && departure ? `${departure.getDay()}@${departure.getHours()}:${departure.getMinutes()}` : '';
+  const key = `${coordKey(from)}|${coordKey(to)}|${mode.key}|${when}`;
+  if (travelCache.has(key)) return travelCache.get(key);
+
+  const stored = loadTravelStore()[key];
+  if (stored) {
+    const hit = Promise.resolve(stored.r);
+    travelCache.set(key, hit);
+    return hit;
+  }
+
+  const task = (async () => {
+    try {
+      const body = {
+        origin: { location: { latLng: { latitude: Number(from.lat), longitude: Number(from.lng) } } },
+        destination: { location: { latLng: { latitude: Number(to.lat), longitude: Number(to.lng) } } },
+        travelMode: mode.key
+      };
+      if (mode.key === 'TRANSIT' && departure) body.departureTime = departure.toISOString();
+
+      const response = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline'
+        },
+        body: JSON.stringify(body)
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        console.error('Travel time lookup failed:', data?.error?.message || response.status);
+        return null; // not remembered, so a later visit can try again
+      }
+      const route = data.routes?.[0];
+      const result = route ? {
+        seconds: parseInt(String(route.duration || '0').replace('s', ''), 10) || 0,
+        meters: route.distanceMeters || 0,
+        polyline: route.polyline?.encodedPolyline || ''
+      } : null;
+      rememberTravel(key, result);
+      return result;
+    } catch (e) {
+      console.error('Travel time lookup failed:', e);
+      return null;
+    }
+  })();
+  travelCache.set(key, task);
+  return task;
+}
+
+// The moment used for public-transport timetables. Timetables repeat weekly, and the
+// lookup only accepts dates close to today, so use the next occurrence of the planned
+// weekday and time. The result is stable between renders (no repeated lookups).
 export function getDepartureDate(dateStr, timeStr) {
   if (!dateStr) return null;
   const [y, m, d] = dateStr.split('-').map(Number);
   const [hh, mm] = (timeStr || '12:00').split(':').map(Number);
   if (!y || !m || !d) return null;
-  const date = new Date(y, m - 1, d, hh || 0, mm || 0);
-  return date.getTime() > Date.now() ? date : new Date();
+  const planned = new Date(y, m - 1, d, hh || 0, mm || 0);
+  if (isNaN(planned.getTime())) return null;
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), planned.getHours(), planned.getMinutes());
+  next.setDate(next.getDate() + ((planned.getDay() - now.getDay() + 7) % 7));
+  if (next.getTime() <= now.getTime() + 60 * 1000) next.setDate(next.getDate() + 7);
+  return next;
 }
 
 export function renderPriceLevel(priceLevel) {
@@ -282,10 +342,11 @@ export function checkIsClosed(timeStr, openingHours, dateStr) {
   return !isOpen;
 }
 
-// Walk / transit / drive for one leg. Returns { loading, data: { WALK, TRANSIT, DRIVE } }.
+// Walk, transit and car for one leg. Returns { loading, data: { WALK, TRANSIT, DRIVE } }.
+// All three are always looked up; nothing is chosen on the traveller's behalf.
 export function useLegTravel(from, to, departure, enabled = true) {
   const [state, setState] = useState({ loading: true, data: {} });
-  const depKey = departure ? departure.getTime() : null;
+  const depKey = departure ? `${departure.getDay()}@${departure.getHours()}:${departure.getMinutes()}` : '';
   useEffect(() => {
     if (!enabled || !from || !to) return;
     let cancelled = false;
@@ -302,15 +363,59 @@ export function useLegTravel(from, to, departure, enabled = true) {
   return state;
 }
 
-// Pick a sensible mode for a leg: walk when short, otherwise transit, else drive.
-export function pickLeg(data) {
-  if (!data) return null;
-  const walk = data.WALK, transit = data.TRANSIT, drive = data.DRIVE;
-  if (walk && walk.seconds <= 20 * 60) return { mode: TRAVEL_MODES[0], ...walk };
-  if (transit) return { mode: TRAVEL_MODES[1], ...transit };
-  if (drive) return { mode: TRAVEL_MODES[2], ...drive };
-  if (walk) return { mode: TRAVEL_MODES[0], ...walk };
-  return null;
+// Road geometry for a list of legs in one travel mode, for drawing on the map.
+// legs: [{ from, to, departure }] → [{ path: [{lat,lng}], road: boolean }]
+// A leg with no route (or still loading) falls back to a straight line.
+export function useRoutePaths(legs, modeKey, enabled = true) {
+  const signature = legs.map(l => `${coordKey(l.from)}>${coordKey(l.to)}`).join('|');
+  const [found, setFound] = useState({ signature: '', modeKey: '', lines: [] });
+  useEffect(() => {
+    if (!enabled || !legs.length) return;
+    let cancelled = false;
+    const mode = modeByKey(modeKey);
+    Promise.all(legs.map(l => fetchTravel(l.from, l.to, mode, l.departure))).then(results => {
+      if (cancelled) return;
+      setFound({ signature, modeKey, lines: results.map(r => (r?.polyline ? decodePolyline(r.polyline) : null)) });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature, modeKey, enabled]);
+  const current = found.signature === signature && found.modeKey === modeKey;
+  return legs.map((l, i) => {
+    const line = current ? found.lines[i] : null;
+    return line && line.length > 1
+      ? { path: line, road: true }
+      : { path: [{ lat: Number(l.from.lat), lng: Number(l.from.lng) }, { lat: Number(l.to.lat), lng: Number(l.to.lng) }], road: false };
+  });
+}
+
+// Shrink a chosen photo to a small square JPEG that is cheap to store and send.
+export function fileToAvatar(file, size = 320) {
+  return new Promise((resolve, reject) => {
+    if (!file || !/^image\//.test(file.type || '')) { reject(new Error('Choose an image file.')); return; }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const side = Math.min(img.naturalWidth, img.naturalHeight);
+        if (!side) throw new Error('empty');
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#f8f4ec';
+        ctx.fillRect(0, 0, size, size);
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/jpeg', 0.84));
+      } catch {
+        reject(new Error('That photo could not be read. Try a JPG or PNG.'));
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('That photo could not be read. Try a JPG or PNG.')); };
+    img.src = url;
+  });
 }
 
 export function formatRange(startDateStr, daysCount) {

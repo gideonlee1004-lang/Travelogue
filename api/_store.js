@@ -21,7 +21,7 @@ export function createStore(getCollection) {
       return await getCollection();
     } catch (err) {
       if (err instanceof StoreError) throw err;
-      throw new StoreError('Unable to connect to MongoDB Atlas. Check the connection settings and retry.');
+      throw new StoreError('Unable to reach the Travelogue server. Please try again in a moment.');
     }
   }
 
@@ -30,7 +30,7 @@ export function createStore(getCollection) {
       return await fn();
     } catch (err) {
       if (err instanceof ConflictError || err instanceof StoreError) throw err;
-      throw new StoreError('Unable to reach MongoDB Atlas. Please retry.');
+      throw new StoreError('Unable to reach the Travelogue server. Please try again.');
     }
   }
 
@@ -90,7 +90,8 @@ export const isConfigured = () => !!MONGODB_URI;
 
 export async function getMongoCollection() {
   if (!MONGODB_URI) {
-    throw new StoreError('Unable to connect to MongoDB Atlas: MONGODB_URI is not configured on the server.');
+    console.error('[Travelogue] MONGODB_URI is not configured in the server environment variables.');
+    throw new StoreError('Travelogue storage is not set up on the server yet.');
   }
   if (!globalThis.__travelogueMongo) {
     globalThis.__travelogueMongo = (async () => {

@@ -1,192 +1,214 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GoogleMap, MarkerF, PolylineF } from '@react-google-maps/api';
 import { Plus, Minus, LocateFixed, Maximize2 } from 'lucide-react';
-import { MAP_OPTIONS, pinForPlace, pinForStop, STAY_PIN, COLORS, makePin } from '../theme.js';
-import { fetchTravel, TRAVEL_MODES } from '../lib/helpers.js';
-import { decodeRoutePolyline } from '../lib/routePolyline.js';
+import { MAP_OPTIONS, pinForPlace, flightPin, stayPin, shortName, COLORS } from '../theme.js';
+import { getCurvedPath } from '../lib/helpers.js';
 
 const CONTAINER = { width: '100%', height: '100%' };
+const hasCoords = o => o && o.lat != null && o.lng != null && !Number.isNaN(Number(o.lat)) && !Number.isNaN(Number(o.lng));
+const ll = o => ({ lat: Number(o.lat), lng: Number(o.lng) });
 
-function getCurvedPath(dep, arr, numPoints = 50) {
-  const lat1 = Number(dep.lat), lng1 = Number(dep.lng), lat2 = Number(arr.lat), lng2 = Number(arr.lng);
-  const midLat = (lat1 + lat2) / 2, midLng = (lng1 + lng2) / 2;
-  const dx = lng2 - lng1, dy = lat2 - lat1;
-  const controlLat = midLat - dx * 0.25, controlLng = midLng + dy * 0.25;
-  const pts = [];
-  for (let i = 0; i <= numPoints; i++) {
-    const t = i / numPoints;
-    pts.push({
-      lat: (1 - t) * (1 - t) * lat1 + 2 * (1 - t) * t * controlLat + t * t * lat2,
-      lng: (1 - t) * (1 - t) * lng1 + 2 * (1 - t) * t * controlLng + t * t * lng2
-    });
-  }
-  return pts;
+const DASH = { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 };
+const ROAD_CASING = { strokeColor: '#fffdf8', strokeOpacity: 0.95, strokeWeight: 7, zIndex: 1 };
+const roadLine = { strokeOpacity: 0, zIndex: 2, icons: [{ icon: { ...DASH, strokeColor: COLORS.sageDeep }, offset: '0', repeat: '12px' }] };
+const straightLine = { strokeOpacity: 0, zIndex: 2, icons: [{ icon: { ...DASH, strokeColor: COLORS.sage, strokeOpacity: 0.75 }, offset: '0', repeat: '16px' }] };
+// --- Which name labels fit? ---
+// Stops in a city are often a few hundred metres apart, so their names would pile up.
+// Work out where each pin lands on screen at the current zoom and keep a label only
+// if it is clear of the labels already kept and of the other pins.
+const toPixels = (p, zoomLevel) => {
+  const scale = 256 * 2 ** zoomLevel;
+  const sin = Math.min(0.9999, Math.max(-0.9999, Math.sin((p.lat * Math.PI) / 180)));
+  return { x: ((p.lng + 180) / 360) * scale, y: (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * scale };
+};
+const textWidth = text => [...text].reduce((w, ch) => w + (ch.charCodeAt(0) > 0x2e7f ? 11.5 : 6.4), 16);
+const overlaps = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
+
+function fittingLabels(items, zoomLevel) {
+  const placed = items.map(it => ({ ...it, at: toPixels(it.position, zoomLevel) }));
+  const pinBoxes = placed.map(p => ({ l: p.at.x - 15, r: p.at.x + 15, t: p.at.y - 46, b: p.at.y + 4 }));
+  const kept = [];
+  const visible = new Set();
+  placed.forEach((p, i) => {
+    const w = textWidth(p.text);
+    const box = { l: p.at.x - w / 2, r: p.at.x + w / 2, t: p.at.y + 5, b: p.at.y + 25 };
+    if (kept.some(k => overlaps(k, box))) return;
+    if (pinBoxes.some((pin, j) => j !== i && overlaps(pin, box))) return;
+    kept.push(box);
+    visible.add(p.key);
+  });
+  return visible;
 }
 
-const hasCoords = o => o && o.lat != null && o.lng != null && !Number.isNaN(Number(o.lat));
-const ll = o => ({ lat: Number(o.lat), lng: Number(o.lng) });
+const flightLine = { strokeOpacity: 0, zIndex: 2, icons: [{ icon: { ...DASH, strokeColor: '#4f6d8a' }, offset: '0', repeat: '15px' }] };
 
 /**
  * Styled map used across pages.
- *  places  – saved places (category pins)
- *  stops   – itinerary stops in order (numbered pins + dashed route)
- *  stays   – stays (bed pins)
- *  route   – draw dashed line through stops (default true when stops given)
+ *  places   – saved places (icon pins)
+ *  stops    – itinerary stops in order; flights are drawn as arcs
+ *  stays    – stays (bed pins)
+ *  segments – [{ path, road }] route pieces between stops. When omitted and `route`
+ *             is true, stops are joined with straight dashed lines.
+ *  numbered – show each stop's order on its pin
+ *  labels   – show each stop's name under its pin
+ *  focus    – 'all' zooms to everything; 'ground' zooms to stops and stays and lets flights run off the edge
  */
 export function TripMap({
   isLoaded, loadError, center, zoom = 11,
-  places = [], stops = [], stays = [], route = true, routePath = null,
-  roadRouting = false, routeGroups = null,
-  fitKey, padding = 48, className = '', controls = true, onExpand, onMarkerClick,
+  places = [], stops = [], stays = [], route = true, segments = null,
+  numbered = false, labels = false, focus = 'all',
+  fitKey, padding = null, className = '', controls = true, onExpand, onMarkerClick,
   highlightId = null
 }) {
   const [map, setMap] = useState(null);
-  const mapOptions = useMemo(() => ({
-    ...MAP_OPTIONS,
-    gestureHandling: typeof window !== 'undefined' && window.matchMedia?.('(max-width: 1023px)').matches ? 'cooperative' : MAP_OPTIONS.gestureHandling
-  }), []);
-  const onLoad = useCallback(m => setMap(m), []);
+  const [zoomLevel, setZoomLevel] = useState(zoom);
+  const mapRef = useRef(null);
+  const onLoad = useCallback(m => { mapRef.current = m; setMap(m); }, []);
+  const onZoomChanged = useCallback(() => {
+    const z = mapRef.current?.getZoom?.();
+    if (typeof z === 'number') setZoomLevel(z);
+  }, []);
   const onUnmount = useCallback(() => setMap(null), []);
   const lastFit = useRef('');
 
-  const points = useMemo(() => {
-    const pts = [];
-    stops.forEach(s => {
-      if (s.isFlight) {
-        if (hasCoords({ lat: s.departureLat, lng: s.departureLng })) pts.push({ lat: Number(s.departureLat), lng: Number(s.departureLng) });
-        if (hasCoords({ lat: s.arrivalLat, lng: s.arrivalLng })) pts.push({ lat: Number(s.arrivalLat), lng: Number(s.arrivalLng) });
-      } else if (hasCoords(s)) pts.push(ll(s));
+  // The same stay is usually pinned to several nights; draw it once.
+  const uniqueStays = useMemo(() => {
+    const seen = new Set();
+    return stays.filter(s => {
+      if (!hasCoords(s)) return false;
+      const key = `${s.name}|${Number(s.lat).toFixed(5)}|${Number(s.lng).toFixed(5)}`;
+      return seen.has(key) ? false : seen.add(key);
     });
-    places.forEach(p => { if (hasCoords(p)) pts.push(ll(p)); });
-    stays.forEach(s => { if (hasCoords(s)) pts.push(ll(s)); });
-    return pts;
-  }, [places, stops, stays]);
+  }, [stays]);
+
+  // What the map zooms to. With focus="ground", a flight does not drag the view out to
+  // another continent: the map stays on the day's stops and the arc runs off the edge.
+  const points = useMemo(() => {
+    const ground = [];
+    stops.forEach(s => { if (!s.isFlight && hasCoords(s)) ground.push(ll(s)); });
+    places.forEach(p => { if (hasCoords(p)) ground.push(ll(p)); });
+    uniqueStays.forEach(s => ground.push(ll(s)));
+    const airports = [];
+    stops.forEach(s => {
+      if (!s.isFlight) return;
+      if (hasCoords({ lat: s.departureLat, lng: s.departureLng })) airports.push({ lat: Number(s.departureLat), lng: Number(s.departureLng) });
+      if (hasCoords({ lat: s.arrivalLat, lng: s.arrivalLng })) airports.push({ lat: Number(s.arrivalLat), lng: Number(s.arrivalLng) });
+    });
+    return focus === 'ground' && ground.length ? ground : [...ground, ...airports];
+  }, [places, stops, uniqueStays, focus]);
+
+  // Pins stand ~50px above their spot and names hang below it, so the view needs more
+  // room at the top than at the sides, and the controls need room on the right.
+  const pad = useMemo(() => padding || { top: 58, right: controls ? 54 : 28, bottom: labels ? 30 : 22, left: 28 }, [padding, controls, labels]);
+
+  const fit = useCallback(() => {
+    if (!map) return;
+    if (points.length > 1) {
+      const b = new window.google.maps.LatLngBounds();
+      points.forEach(p => b.extend(p));
+      map.fitBounds(b, pad);
+    } else if (points.length === 1) {
+      map.panTo(points[0]); map.setZoom(14);
+    } else if (center) {
+      map.panTo(center); map.setZoom(zoom);
+    }
+  }, [map, points, center, zoom, pad]);
 
   useEffect(() => {
     if (!map) return;
     const key = `${fitKey || ''}|${points.map(p => `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`).join(';')}`;
     if (lastFit.current === key) return;
     lastFit.current = key;
-    if (points.length > 1) {
-      const b = new window.google.maps.LatLngBounds();
-      points.forEach(p => b.extend(p));
-      map.fitBounds(b, { top: padding, right: padding, bottom: padding, left: padding });
-    } else if (points.length === 1) {
-      map.panTo(points[0]); map.setZoom(14);
-    } else if (center) {
-      map.panTo(center); map.setZoom(zoom);
-    }
-  }, [map, points, fitKey, center, zoom, padding]);
+    fit();
+  }, [map, points, fitKey, fit]);
 
-  const routeLine = useMemo(() => {
-    if (roadRouting) return null;
-    if (routePath) return routePath;
-    if (!route) return null;
+  const lines = useMemo(() => {
+    if (segments) return segments.filter(s => s?.path?.length > 1);
+    if (!route) return [];
     const pts = stops.filter(s => !s.isFlight && hasCoords(s)).map(ll);
-    return pts.length > 1 ? pts : null;
-  }, [stops, route, routePath, roadRouting]);
+    return pts.slice(1).map((p, i) => ({ path: [pts[i], p], road: false }));
+  }, [segments, stops, route]);
 
-  // Road geometry is fetched for adjacent stops only. Flights and day boundaries
-  // break a road route; no phantom road segment is drawn through an airport flight.
-  const roadSignature = JSON.stringify((roadRouting ? (routeGroups || [stops]) : []).map(group =>
-    group.map(p => p?.isFlight ? null : hasCoords(p) ? ll(p) : null)
-  ));
-  const [roadPaths, setRoadPaths] = useState([]);
-  const [roadStatus, setRoadStatus] = useState('idle');
-  useEffect(() => {
-    if (!roadRouting || !isLoaded || loadError) { setRoadPaths([]); setRoadStatus('idle'); return; }
-    const groups = JSON.parse(roadSignature);
-    const pairs = groups.flatMap(group => group.slice(1).map((to, i) => [group[i], to])
-      .filter(([from, to]) => from && to && (from.lat !== to.lat || from.lng !== to.lng)));
-    if (!pairs.length) { setRoadPaths([]); setRoadStatus('idle'); return; }
-    let cancelled = false;
-    setRoadStatus('loading');
-    setRoadPaths([]);
-    Promise.all(pairs.map(async ([from, to]) => {
-      const result = await fetchTravel(from, to, TRAVEL_MODES[2]);
-      return decodeRoutePolyline(result?.encodedPolyline);
-    })).then(paths => {
-      if (cancelled) return;
-      setRoadPaths(paths.filter(path => path.length >= 2));
-      setRoadStatus(paths.some(path => path.length >= 2) ? 'ready' : 'unavailable');
-    }).catch(() => { if (!cancelled) { setRoadPaths([]); setRoadStatus('unavailable'); } });
-    return () => { cancelled = true; };
-  }, [roadRouting, roadSignature, isLoaded, loadError]);
+  // Stops first (in visiting order), then stays: earlier entries win a contested spot.
+  const shownLabels = useMemo(() => {
+    if (!labels) return new Set();
+    const items = [];
+    stops.forEach((s, i) => { if (!s.isFlight && hasCoords(s)) items.push({ key: s.id || `s_${i}`, position: ll(s), text: shortName(s.name) }); });
+    uniqueStays.forEach((s, i) => items.push({ key: `stay_${i}_${s.name}`, position: ll(s), text: shortName(s.name) }));
+    return fittingLabels(items, zoomLevel);
+  }, [labels, stops, uniqueStays, zoomLevel]);
 
   const zoomBy = d => { if (map) map.setZoom((map.getZoom() || zoom) + d); };
-  const recenter = () => { lastFit.current = ''; setMap(m => m); if (map && points.length) { const b = new window.google.maps.LatLngBounds(); points.forEach(p => b.extend(p)); points.length > 1 ? map.fitBounds(b, { top: padding, right: padding, bottom: padding, left: padding }) : (map.panTo(points[0]), map.setZoom(14)); } };
 
+  let order = 0;
   return (
     <div className={`${/\babsolute\b/.test(className) ? '' : 'relative'} overflow-hidden bg-[#f1ead9] ${className}`} style={{ minHeight: 160 }}>
       {loadError ? (
-        <div className="absolute inset-0 flex items-center justify-center text-xs text-red-600 p-4">Map could not load.</div>
+        <div className="absolute inset-0 flex items-center justify-center text-xs text-ink-3 p-4 text-center">The map could not be loaded. Check your connection and reload the page.</div>
       ) : !isLoaded ? (
         <div className="absolute inset-0 flex items-center justify-center text-xs text-ink-3">Loading map…</div>
       ) : (
         <div className="absolute inset-0">
-        <GoogleMap mapContainerStyle={CONTAINER} center={center || { lat: 35.68, lng: 139.76 }} zoom={zoom} options={mapOptions} onLoad={onLoad} onUnmount={onUnmount}>
-          {roadRouting && roadPaths.map((path, i) => (
-            <PolylineF key={`road_${i}`} path={path} options={{ strokeColor: COLORS.sageDeep, strokeWeight: 4, strokeOpacity: 0.9, zIndex: 1 }} />
-          ))}
-          {routeLine && (
-            <PolylineF path={routeLine} options={{
-              strokeOpacity: 0, strokeWeight: 3,
-              icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.9, strokeColor: COLORS.sageDeep, scale: 3 }, offset: '0', repeat: '14px' }]
-            }} />
-          )}
-          {routeLine && routeLine.map((p, i) => (
-            <MarkerF key={`dot_${i}`} position={p} icon={{
-              path: window.google.maps.SymbolPath.CIRCLE, scale: 4, fillColor: '#fffdf8', fillOpacity: 1, strokeColor: COLORS.sageDeep, strokeWeight: 2
-            }} zIndex={1} />
-          ))}
+          <GoogleMap mapContainerStyle={CONTAINER} center={center || { lat: 35.68, lng: 139.76 }} zoom={zoom} options={MAP_OPTIONS} onLoad={onLoad} onUnmount={onUnmount} onZoomChanged={onZoomChanged}>
+            {lines.map((seg, i) => (
+              <React.Fragment key={`seg_${i}_${seg.road ? 'r' : 's'}_${seg.path.length}`}>
+                {seg.road && <PolylineF path={seg.path} options={ROAD_CASING} />}
+                <PolylineF path={seg.path} options={seg.road ? roadLine : straightLine} />
+              </React.Fragment>
+            ))}
 
-          {places.map((p, i) => hasCoords(p) ? (
-            <MarkerF key={p.id || `p_${i}`} position={ll(p)} icon={pinForPlace(p, { size: highlightId === p.id ? 48 : 38 })}
-              title={p.name} zIndex={highlightId === p.id ? 50 : 10} onClick={onMarkerClick ? () => onMarkerClick(p) : undefined} />
-          ) : null)}
+            {places.map((p, i) => {
+              if (!hasCoords(p)) return null;
+              const active = highlightId === p.id;
+              const pin = pinForPlace(p, { size: active ? 46 : 36 });
+              return <MarkerF key={p.id || `p_${i}`} position={ll(p)} icon={pin.icon} title={p.name} zIndex={active ? 50 : 10}
+                onClick={onMarkerClick ? () => onMarkerClick(p) : undefined} />;
+            })}
 
-          {stops.map((s, i) => {
-            if (s.isFlight) {
-              const dep = { lat: s.departureLat ?? s.lat, lng: s.departureLng ?? s.lng };
-              const arr = { lat: s.arrivalLat, lng: s.arrivalLng };
-              if (!hasCoords(dep) || !hasCoords(arr)) return null;
-              const path = getCurvedPath(dep, arr);
-              const mid = path[Math.floor(path.length / 2)];
-              return (
-                <React.Fragment key={s.id || `f_${i}`}>
-                  <PolylineF path={path} options={{ strokeOpacity: 0, strokeWeight: 2, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeColor: '#4f6d8a', scale: 3 }, offset: '0', repeat: '15px' }] }} />
-                  <MarkerF position={mid} icon={makePin({ color: '#4f6d8a', glyph: 'plane', size: 36 })} title={s.name} zIndex={20} />
-                </React.Fragment>
-              );
-            }
-            if (!hasCoords(s)) return null;
-            return <MarkerF key={s.id || `s_${i}`} position={ll(s)} icon={pinForStop(s, i)} title={s.name} zIndex={30}
-              onClick={onMarkerClick ? () => onMarkerClick(s) : undefined} />;
-          })}
+            {stops.map((s, i) => {
+              if (s.isFlight) {
+                const dep = { lat: s.departureLat ?? s.lat, lng: s.departureLng ?? s.lng };
+                const arr = { lat: s.arrivalLat, lng: s.arrivalLng };
+                if (!hasCoords(dep) || !hasCoords(arr)) return null;
+                const path = getCurvedPath(dep, arr);
+                const mid = path[Math.floor(path.length / 2)];
+                return (
+                  <React.Fragment key={s.id || `f_${i}`}>
+                    <PolylineF path={path} options={flightLine} />
+                    <MarkerF position={mid} icon={flightPin().icon} title={s.name} zIndex={20} />
+                  </React.Fragment>
+                );
+              }
+              if (!hasCoords(s)) return null;
+              order += 1;
+              const key = s.id || `s_${i}`;
+              const pin = pinForPlace(s, { size: 38, badge: numbered ? order : '', label: shownLabels.has(key) ? shortName(s.name) : '' });
+              return <MarkerF key={key} position={ll(s)} icon={pin.icon} label={pin.label} title={s.name} zIndex={30 + order}
+                onClick={onMarkerClick ? () => onMarkerClick(s) : undefined} />;
+            })}
 
-          {stays.map((s, i) => hasCoords(s) ? (
-            <MarkerF key={s.id || `stay_${i}`} position={ll(s)} icon={STAY_PIN()} title={`Stay: ${s.name}`} zIndex={25} />
-          ) : null)}
-        </GoogleMap>
+            {uniqueStays.map((s, i) => {
+              const key = `stay_${i}_${s.name}`;
+              const pin = stayPin({ label: shownLabels.has(key) ? shortName(s.name) : '' });
+              return <MarkerF key={key} position={ll(s)} icon={pin.icon} label={pin.label} title={`Stay: ${s.name}`} zIndex={25} />;
+            })}
+          </GoogleMap>
         </div>
       )}
 
-      {roadRouting && roadStatus === 'unavailable' && (
-        <div className="absolute bottom-3 left-3 z-10 rounded-lg border border-line bg-paper/95 px-2.5 py-1.5 text-[11px] text-ink-2 shadow-sm">Road directions unavailable</div>
-      )}
       {controls && isLoaded && !loadError && (
-        <div className="absolute right-3 bottom-3 flex flex-col gap-1.5">
+        <div className="absolute right-2.5 bottom-2.5 flex flex-col gap-1.5">
           {onExpand && (
-            <button onClick={onExpand} className="w-9 h-9 rounded-lg bg-paper/95 border border-line shadow-sm flex items-center justify-center text-ink-2 hover:text-ink cursor-pointer" title="Expand">
+            <button onClick={onExpand} className="w-9 h-9 rounded-lg bg-paper/95 border border-line shadow-sm flex items-center justify-center text-ink-2 hover:text-ink cursor-pointer" title="Open larger map" aria-label="Open larger map">
               <Maximize2 className="w-4 h-4" />
             </button>
           )}
-          <button onClick={recenter} className="w-9 h-9 rounded-lg bg-paper/95 border border-line shadow-sm flex items-center justify-center text-ink-2 hover:text-ink cursor-pointer" title="Recenter">
+          <button onClick={fit} className="w-9 h-9 rounded-lg bg-paper/95 border border-line shadow-sm flex items-center justify-center text-ink-2 hover:text-ink cursor-pointer" title="Show everything" aria-label="Show everything">
             <LocateFixed className="w-4 h-4" />
           </button>
           <div className="rounded-lg bg-paper/95 border border-line shadow-sm overflow-hidden">
-            <button onClick={() => zoomBy(1)} className="w-9 h-9 flex items-center justify-center text-ink-2 hover:text-ink border-b border-line cursor-pointer"><Plus className="w-4 h-4" /></button>
-            <button onClick={() => zoomBy(-1)} className="w-9 h-9 flex items-center justify-center text-ink-2 hover:text-ink cursor-pointer"><Minus className="w-4 h-4" /></button>
+            <button onClick={() => zoomBy(1)} className="w-9 h-9 flex items-center justify-center text-ink-2 hover:text-ink border-b border-line cursor-pointer" aria-label="Zoom in"><Plus className="w-4 h-4" /></button>
+            <button onClick={() => zoomBy(-1)} className="w-9 h-9 flex items-center justify-center text-ink-2 hover:text-ink cursor-pointer" aria-label="Zoom out"><Minus className="w-4 h-4" /></button>
           </div>
         </div>
       )}

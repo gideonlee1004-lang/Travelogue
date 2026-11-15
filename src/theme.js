@@ -122,71 +122,104 @@ export const MAP_OPTIONS = {
 };
 
 // --- Pins -------------------------------------------------------------------
-// Rounded teardrop pin with an icon glyph inside, matching the mockups.
+// A round-headed pin with a line icon, standing over a small ring that marks the
+// exact spot. Drawn as SVG so it stays crisp at any zoom.
 const GLYPHS = {
-  landmark: '<path d="M3 22h18M5 22V12m14 10V12M6 12h12M12 3 3 9h18L12 3zm-3 9v6m6-6v6"/>',
-  utensils: '<path d="M3 2v7a3 3 0 0 0 6 0V2M6 2v20M20 2c-2 0-4 3-4 7v3h4v10"/>',
-  sparkles: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3zM5 18l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7.7-2z"/>',
-  bed: '<path d="M2 20V9m0 5h20m0 6v-6a3 3 0 0 0-3-3H10v3M6 10h3a1 1 0 0 1 1 1v3"/>',
+  landmark: '<path d="M3 21h18M5 21v-9m14 9v-9M4 12h16M12 3 3 9h18L12 3zm-3 9v6m6-6v6"/>',
+  utensils: '<path d="M4 2v7a3 3 0 0 0 6 0V2M7 2v20M20 2c-2.2 0-4 3-4 7v3h4v10"/>',
+  sparkles: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/>',
+  bed: '<path d="M2 19V8m0 6h20m0 5v-5a3 3 0 0 0-3-3h-9v3M6 10.5h2.5"/>',
   plane: '<path d="M2 16l20-6-6 6 2 6-3 1-3-5-5 2-1-2 4-3-6-3z"/>',
-  tree: '<path d="M12 2 5 12h4l-4 6h14l-4-6h4L12 2zm0 16v4"/>',
-  coffee: '<path d="M17 8h1a4 4 0 1 1 0 8h-1M3 8h14v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V8zM6 2v2M10 2v2M14 2v2"/>',
-  pin: '<circle cx="12" cy="10" r="3.5"/>',
-  torii: '<path d="M3 5h18M5 5v15M19 5v15M4 9h16M2 5c3-2 17-2 20 0"/>',
-  lotus: '<path d="M12 20c-5 0-9-3-9-7 3 0 5 1 6 3 0-4 1-7 3-10 2 3 3 6 3 10 1-2 3-3 6-3 0 4-4 7-9 7z"/>'
+  tree: '<path d="M12 2 5.5 11H9l-4.5 6.5h15L15 11h3.5L12 2zm0 15.5V22"/>',
+  coffee: '<path d="M17 8h1a3.5 3.5 0 1 1 0 7h-1M3 8h14v7a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V8zM7 2v2.5M11 2v2.5"/>',
+  pin: '<circle cx="12" cy="12" r="4"/>',
+  torii: '<path d="M2 5.5c3.5 1.2 16.5 1.2 20 0M6 6.200V21M18 6.200V21M4 10.500h16M12 6.500v4"/>',
+  lotus: '<path d="M12 20c-5 0-9-3-9-7 3 0 5 1 6 3 0-4 1-7 3-10 2 3 3 6 3 10 1-2 3-3 6-3 0 4-4 7-9 7z"/>',
+  mountain: '<path d="m3 20 6.5-11 3.5 6 2.5-4L21 20H3z"/>',
+  train: '<path d="M7 3h10a2 2 0 0 1 2 2v9a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V5a2 2 0 0 1 2-2zM5 10h14M9 17l-2 4m8-4 2 4M9 13.500h.01M15 13.500h.01"/>',
+  bag: '<path d="M5 8h14l1 13H4L5 8zm4 0V6a3 3 0 0 1 6 0v2"/>',
+  wave: '<path d="M2 9c2.5-2.5 5-2.5 7.5 0s5 2.5 7.5 0 3.5-2 5-1M2 15c2.5-2.5 5-2.5 7.5 0s5 2.5 7.5 0 3.5-2 5-1"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4V8z"/><circle cx="12" cy="13" r="3.5"/>'
 };
 
-const PIN_GLYPH_BY_CATEGORY = {
-  'Places to Visit': 'torii',
-  'Food & Eats': 'utensils',
-  'Experiences': 'tree',
-  'Stays/Hotel': 'bed',
-  'Flights': 'plane'
+// What a place is decides its icon; its saved category decides the colour.
+const GLYPH_RULES = [
+  [/shrine|shinto|torii|temple|place_of_worship|pagoda/, 'torii'],
+  [/onsen|spa|hot_spring|bath/, 'lotus'],
+  [/cafe|coffee|bakery|tea_house|dessert/, 'coffee'],
+  [/restaurant|food|meal|sushi|ramen|izakaya|bar|market/, 'utensils'],
+  [/lodging|hotel|ryokan|hostel|resort/, 'bed'],
+  [/mountain|volcano|peak|viewpoint|observation/, 'mountain'],
+  [/beach|lake|river|bay|waterfall|coast|island/, 'wave'],
+  [/park|garden|forest|hiking|nature|campground|botanical/, 'tree'],
+  [/museum|art_gallery|historical|cultural|landmark|monument|castle|palace/, 'landmark'],
+  [/train|station|transit|airport/, 'train'],
+  [/shopping|store|mall|department/, 'bag'],
+  [/tourist_attraction|amusement|zoo|aquarium/, 'camera']
+];
+const GLYPH_BY_CATEGORY = {
+  'Places to Visit': 'landmark', 'Food & Eats': 'utensils', 'Experiences': 'tree', 'Stays/Hotel': 'bed', 'Flights': 'plane'
 };
+
+export function glyphForPlace(place) {
+  const types = (Array.isArray(place?.types) ? place.types.join(' ') : '').toLowerCase();
+  for (const [re, glyph] of GLYPH_RULES) if (types && re.test(types)) return glyph;
+  return GLYPH_BY_CATEGORY[place?.category] || 'pin';
+}
+
+const PIN_COLORS = {
+  torii: COLORS.clay, landmark: COLORS.clay, camera: COLORS.clay,
+  utensils: '#b9542e', coffee: '#a5683a', bag: '#a5683a',
+  tree: '#647a52', mountain: '#647a52', lotus: '#647a52', wave: '#5f8590',
+  bed: '#6d8799', train: '#6b6354', plane: '#4f6d8a', pin: COLORS.sage, sparkles: COLORS.sage
+};
+
+export function shortName(name = '', max = 18) {
+  const base = String(name).split(/[,(（–—]| - /)[0].trim() || String(name).trim();
+  return base.length > max ? `${base.slice(0, max - 1).trimEnd()}…` : base;
+}
 
 const pinCache = new Map();
-export function makePin({ color = COLORS.clay, glyph = 'pin', size = 40, label = '' } = {}) {
-  const key = `${color}|${glyph}|${size}|${label}`;
+/**
+ * color – fill; glyph – key of GLYPHS; size – width in px of the 48×64 artwork;
+ * badge – small number shown on the shoulder (stop order); label – name shown under the pin.
+ */
+export function makePin({ color = COLORS.clay, glyph = 'pin', size = 38, badge = '', label = '' } = {}) {
+  const key = `${color}|${glyph}|${size}|${badge}|${label}`;
   if (pinCache.has(key)) return pinCache.get(key);
-  const w = size, h = Math.round(size * 1.3);
+  const w = size, h = Math.round((size * 64) / 48);
   const svg = `
-  <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 40 52">
-    <defs>
-      <filter id="s" x="-25%" y="-25%" width="150%" height="150%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#514332" flood-opacity="0.28"/></filter>
-      <linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="${color}"/><stop offset="1" stop-color="${color}" stop-opacity="0.86"/></linearGradient>
-    </defs>
-    <path filter="url(#s)" d="M20 49 C16 43 3.5 30 3.5 19 A16.5 16.5 0 0 1 36.5 19 C36.5 30 24 43 20 49 Z" fill="url(#g)" stroke="#fffdf8" stroke-width="2.4"/>
-    <circle cx="20" cy="19.5" r="13.4" fill="none" stroke="#fffdf8" stroke-width="0.8" stroke-opacity="0.36"/>
-    ${label
-      ? `<text x="20" y="24.5" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="700" fill="#fffdf8">${label}</text>`
-      : `<g transform="translate(10.1 9.3) scale(0.82)" fill="none" stroke="#fffdf8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${GLYPHS[glyph] || GLYPHS.pin}</g>`}
+  <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 48 64">
+    <defs><filter id="s" x="-30%" y="-20%" width="160%" height="150%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.6" flood-color="#3c321e" flood-opacity="0.3"/></filter></defs>
+    <circle cx="24" cy="57" r="4.2" fill="#fffdf8" stroke="${color}" stroke-width="2.2"/>
+    <path filter="url(#s)" d="M24 50c-1.2 0-14-13.6-17-23.2A18 18 0 1 1 41 26.8C38 36.4 25.2 50 24 50z" fill="${color}" stroke="#fffdf8" stroke-width="1.8"/>
+    <g transform="translate(13.2 10.2) scale(0.9)" fill="none" stroke="#fffdf8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${GLYPHS[glyph] || GLYPHS.pin}</g>
+    ${badge !== '' ? `<circle cx="38.5" cy="8.5" r="8" fill="#fffdf8" stroke="${color}" stroke-width="1.6"/><text x="38.5" y="12.2" text-anchor="middle" font-family="Inter, Helvetica, Arial, sans-serif" font-size="${String(badge).length > 1 ? 9 : 10.5}" font-weight="700" fill="${color}">${badge}</text>` : ''}
   </svg>`;
+  const g = typeof window !== 'undefined' ? window.google?.maps : null;
+  const anchorY = (h * 57) / 64;
   const icon = {
     url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
-    anchor: { x: w / 2, y: h - 2 },
-    scaledSize: { width: w, height: h }
+    anchor: g?.Point ? new g.Point(w / 2, anchorY) : { x: w / 2, y: anchorY },
+    scaledSize: g?.Size ? new g.Size(w, h) : { width: w, height: h },
+    // the name sits just under the ring
+    labelOrigin: g?.Point ? new g.Point(w / 2, h + 9) : { x: w / 2, y: h + 9 }
   };
-  pinCache.set(key, icon);
-  return icon;
+  const pin = {
+    icon,
+    label: label ? { text: label, className: 'tl-pin-label', color: COLORS.ink, fontSize: '11px', fontWeight: '600', fontFamily: 'Inter, system-ui, sans-serif' } : undefined
+  };
+  pinCache.set(key, pin);
+  return pin;
 }
 
 export function pinForPlace(place, opts = {}) {
-  const meta = categoryMeta(place?.category);
-  return makePin({ color: meta.color, glyph: PIN_GLYPH_BY_CATEGORY[place?.category] || 'pin', ...opts });
+  const glyph = glyphForPlace(place);
+  return makePin({ color: PIN_COLORS[glyph] || categoryMeta(place?.category).color, glyph, ...opts });
 }
 
-export function pinForStop(stop, index) {
-  if (stop?.isFlight) return makePin({ color: CATEGORIES.Flights.color, glyph: 'plane' });
-  const kinds = (stop?.types || []).join(' ').toLowerCase();
-  const cat = stop?.category;
-  if (/restaurant|cafe|bakery|food|market|sushi|ramen/.test(kinds) || cat === 'Food & Eats') return makePin({ color: '#b9774c', glyph: 'utensils', size: 42 });
-  if (/temple|shrine|place_of_worship/.test(kinds)) return makePin({ color: COLORS.clay, glyph: 'torii', size: 42 });
-  if (/forest|park|garden|nature|mountain|lake|hiking/.test(kinds) || cat === 'Experiences') return makePin({ color: COLORS.sageDeep, glyph: 'tree', size: 42 });
-  if (/hotel|lodging|ryokan/.test(kinds) || cat === 'Stays/Hotel') return STAY_PIN();
-  return makePin({ color: COLORS.clay, glyph: 'landmark', size: 42 });
-}
-
-export const STAY_PIN = () => makePin({ color: CATEGORIES['Stays/Hotel'].color, glyph: 'bed', size: 44 });
+export const flightPin = (opts = {}) => makePin({ color: PIN_COLORS.plane, glyph: 'plane', size: 34, ...opts });
+export const stayPin = (opts = {}) => makePin({ color: PIN_COLORS.bed, glyph: 'bed', size: 40, ...opts });
 
 // Deterministic gradient for places without photos.
 const GRADIENTS = [

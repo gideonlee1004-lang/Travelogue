@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import {
-  Search, SlidersHorizontal, CalendarDays, Plane, BedDouble, Map as MapIcon, Users, CheckCircle2, ChevronRight, ArrowRight, MapPin, Leaf, Plus, Building2
+  Search, SlidersHorizontal, CalendarDays, Plane, BedDouble, Map as MapIcon, Users, CheckCircle2, ChevronRight, ChevronDown, ArrowRight, MapPin, Leaf, Plus, Building2
 } from 'lucide-react';
 import { Hero, Card, Chip, SectionTitle, Btn, EmptyNote, WavesFooter } from '../components/Shell.jsx';
 import { PlaceCard } from '../components/PlaceCard.jsx';
@@ -38,9 +38,9 @@ export default function OverviewPage(ctx) {
   const submitSearch = e => { e.preventDefault(); openNewTrip({ name: query }); };
 
   return (
-    <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-5 grid grid-cols-1 lg:grid-cols-[250px_1fr] gap-6">
+    <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-4 sm:py-5 grid grid-cols-1 lg:grid-cols-[250px_1fr] gap-6">
       {/* ---------- Sidebar: current trip ---------- */}
-      <aside className="lg:sticky lg:top-[80px] self-start">
+      <aside className="hidden lg:block lg:sticky lg:top-[80px] self-start">
         <Card className="overflow-hidden bg-cream-2/70">
           {activeTrip ? (
             <div className="p-4">
@@ -97,7 +97,7 @@ export default function OverviewPage(ctx) {
       </aside>
 
       {/* ---------- Main ---------- */}
-      <main className="min-w-0 space-y-6">
+      <main className="min-w-0 space-y-4 sm:space-y-6">
         <Hero eyebrow={firstName ? `Welcome back, ${firstName}` : 'Welcome to Travelogue'}
           title={<>Plan, Explore,<br />and <span className="tl-underline">Remember</span></>}
           subtitle="A calmer way to plan your next journey." />
@@ -109,7 +109,7 @@ export default function OverviewPage(ctx) {
               className="w-full h-11 pl-11 pr-10 rounded-full bg-paper border border-line text-[14px] text-ink placeholder:text-ink-3 focus:outline-none focus:border-sage" />
             <button type="button" onClick={() => openNewTrip({ name: query })} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-3 hover:text-ink cursor-pointer" title="Plan a new trip"><SlidersHorizontal className="w-4 h-4" /></button>
           </form>
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="flex gap-2 tl-strip -mx-4 px-4 sm:mx-0 sm:px-0 pb-1">
             {INTEREST_CHIPS.map(c => (
               <Chip key={c.key} icon={c.Icon} onClick={() => { setFilterCategory(c.category); setRecCategory(c.category); navigate('saved'); }}>{c.key}</Chip>
             ))}
@@ -120,13 +120,24 @@ export default function OverviewPage(ctx) {
           <div className="grid grid-cols-1 xl:grid-cols-[1fr_1.1fr] gap-4">
             <Card className="p-5 relative overflow-hidden">
               <Leaf className="absolute -right-4 -top-4 w-28 h-28 text-sage/15" strokeWidth={0.8} />
-              <p className="text-[13px] text-ink-2">Your Next Trip</p>
-              <button onClick={() => navigate('itinerary')} className="flex items-center gap-2 mt-0.5 group cursor-pointer">
-                <h2 className="font-serif text-[30px] text-ink leading-tight">{activeTrip.name}</h2>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[13px] text-ink-2">Your Next Trip</p>
+                {/* phones have no sidebar, so the trip switcher lives here */}
+                {trips.length > 1 && (
+                  <label className="lg:hidden relative inline-flex items-center gap-1 h-8 pl-3 pr-2 rounded-full bg-paper border border-line text-[12px] text-ink-2 cursor-pointer">
+                    Switch trip <ChevronDown className="w-3.5 h-3.5" />
+                    <select value={activeTrip.id} onChange={e => { setActiveTripId(e.target.value); setActiveDay(null); }} aria-label="Switch trip" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                      {trips.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </label>
+                )}
+              </div>
+              <button onClick={() => navigate('itinerary')} className="flex items-center gap-2 mt-0.5 group cursor-pointer text-left">
+                <h2 className="font-serif text-[28px] sm:text-[30px] text-ink leading-tight">{activeTrip.name}</h2>
                 <span className="w-8 h-8 rounded-full border border-line flex items-center justify-center text-ink-2 group-hover:bg-cream-2"><ChevronRight className="w-4 h-4" /></span>
               </button>
               <p className="text-[13px] text-ink-2 flex items-center gap-1.5 mt-2"><CalendarDays className="w-4 h-4" />{formatRange(activeTrip.startDate, activeTrip.daysCount)} <span className="mx-1">·</span> {activeTrip.daysCount} day{activeTrip.daysCount === 1 ? '' : 's'}</p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 mt-5 gap-y-4 sm:gap-y-0 sm:divide-x divide-line">
+              <div className="grid grid-cols-4 mt-5 divide-x divide-line">
                 {[
                   { Icon: MapPin, v: stats.cities, l: 'Cities' },
                   { Icon: BedDouble, v: stats.distinctStays || stats.stays, l: 'Stays' },
@@ -140,12 +151,17 @@ export default function OverviewPage(ctx) {
                   </div>
                 ))}
               </div>
+              <div className="lg:hidden mt-4 pt-3 border-t border-line">
+                <div className="flex items-center justify-between text-[12px]"><span className="text-ink-2">Trip readiness</span><span className="font-medium text-ink tabular-nums">{stats.readiness}%</span></div>
+                <div className="tl-progress mt-1.5"><span style={{ width: `${stats.readiness}%` }} /></div>
+                <Btn className="w-full mt-4" icon={CalendarDays} onClick={() => navigate('itinerary')}>Open Itinerary</Btn>
+              </div>
             </Card>
             <Card className="overflow-hidden h-[230px] xl:h-auto min-h-[230px] relative">
               <TripMap isLoaded={isLoaded} loadError={loadError} className="absolute inset-0"
                 center={activeTrip.center ? { lat: activeTrip.center[0], lng: activeTrip.center[1] } : undefined} zoom={activeTrip.zoom || 10}
                 places={activeTrip.savedPlaces || []} stops={allStops} stays={Object.values(activeTrip.staysByDay || {})}
-                route={false} fitKey={`ov_${activeTrip.id}`} onExpand={() => navigate('itinerary')} />
+                route={false} focus="ground" fitKey={`ov_${activeTrip.id}`} onExpand={() => navigate('itinerary')} />
             </Card>
           </div>
         ) : (
@@ -186,7 +202,7 @@ export default function OverviewPage(ctx) {
               </button>
             ))}
             {Array.from({ length: Math.max(0, 3 - otherTrips.length) }).map((_, i) => (
-              <button key={`new_${i}`} onClick={() => openNewTrip()} className="h-28 rounded-2xl border border-dashed border-line-2 bg-cream-2/60 hover:bg-sage-soft/60 flex flex-col items-center justify-center text-ink-2 cursor-pointer">
+              <button key={`new_${i}`} onClick={() => openNewTrip()} className={`h-28 rounded-2xl border border-dashed border-line-2 bg-cream-2/60 hover:bg-sage-soft/60 flex-col items-center justify-center text-ink-2 cursor-pointer ${i > 0 ? 'hidden sm:flex' : 'flex'}`}>
                 <Plus className="w-5 h-5" />
                 <span className="text-[13px] mt-1">Plan a new trip</span>
               </button>

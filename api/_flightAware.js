@@ -61,7 +61,11 @@ export class AeroError extends Error {
 
 async function request(path, params = {}, fetcher = fetch) {
   const key = process.env.AEROAPI_KEY;
-  if (!key) throw new AeroError('AEROAPI_KEY is not configured in your Vercel environment variables.', 503);
+  if (!key) {
+    // Shown to whoever is using the app, so keep the setup detail in the server log only.
+    console.error('[Travelogue] AEROAPI_KEY is not configured in the server environment variables.');
+    throw new AeroError('Flight lookup is not set up on the server yet.', 503);
+  }
   const url = new URL(`${BASE}${path}`);
   for (const [k, v] of Object.entries(params)) if (v !== '' && v != null) url.searchParams.set(k, String(v));
   let response;
@@ -71,17 +75,17 @@ async function request(path, params = {}, fetcher = fetch) {
       signal: AbortSignal.timeout(12000)
     });
   } catch {
-    throw new AeroError('Unable to reach FlightAware. Please try again.');
+    throw new AeroError('Unable to reach the flight information service. Please try again.');
   }
   if (!response.ok) {
     if (response.status === 401 || response.status === 403)
-      throw new AeroError('AeroAPI rejected the key or your plan cannot access this endpoint.', 502);
-    if (response.status === 429) throw new AeroError('FlightAware rate limit reached. Try again shortly.', 429);
-    if (response.status === 404) throw new AeroError('Flight not found on FlightAware.', 404);
-    throw new AeroError(`FlightAware request failed (HTTP ${response.status}).`);
+      throw new AeroError('Flight lookup is not available right now.', 502);
+    if (response.status === 429) throw new AeroError('Too many flight lookups at once. Try again shortly.', 429);
+    if (response.status === 404) throw new AeroError('Flight not found.', 404);
+    throw new AeroError(`Flight lookup failed (HTTP ${response.status}).`);
   }
   try { return await response.json(); }
-  catch { throw new AeroError('FlightAware returned an invalid response.'); }
+  catch { throw new AeroError('The flight information service returned an invalid response.'); }
 }
 
 async function getAirport(id, fetcher) {
@@ -227,7 +231,7 @@ export async function lookupFlight(flightNumber, date, { fetcher = fetch, now = 
 export async function refreshFlight(selected, { fetcher = fetch, now = new Date() } = {}) {
   if (!selected || !parseFlightNumber(selected.flightNumber) || !isValidDate(selected.flightDate) ||
       !selected.scheduledOut || !validCode(selected.originIcao || selected.originCode)) {
-    throw new AeroError('Saved flight is missing its AeroAPI identity.', 400);
+    throw new AeroError('This saved flight cannot be refreshed. Add it again using the flight lookup.', 400);
   }
   if (!withinLiveWindow(selected.flightDate, now)) {
     return { lastChecked: null, outsideWindow: true };
