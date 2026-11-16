@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import {
-  Search, SlidersHorizontal, CalendarDays, Plane, BedDouble, Map as MapIcon, Users, CheckCircle2, ChevronRight, ChevronDown, ArrowRight, MapPin, Leaf, Plus, Building2
+  Search, SlidersHorizontal, CalendarDays, Plane, BedDouble, Map as MapIcon, Users, CheckCircle2, ChevronRight, ChevronDown, ArrowRight, MapPin, Plus, Building2
 } from 'lucide-react';
-import { Hero, Card, Chip, SectionTitle, Btn, EmptyNote, WavesFooter } from '../components/Shell.jsx';
+import { Hero, Card, Chip, SectionTitle, Btn, EmptyNote, WavesFooter, Bamboo } from '../components/Shell.jsx';
 import { PlaceCard } from '../components/PlaceCard.jsx';
 import { CoverImage } from '../components/PlacePhoto.jsx';
 import { TripMap } from '../components/TripMap.jsx';
@@ -118,8 +118,8 @@ export default function OverviewPage(ctx) {
 
         {activeTrip ? (
           <div className="grid grid-cols-1 xl:grid-cols-[1fr_1.1fr] gap-4">
-            <Card className="p-5 relative overflow-hidden">
-              <Leaf className="absolute -right-4 -top-4 w-28 h-28 text-sage/15" strokeWidth={0.8} />
+            <Card className="p-5 relative overflow-hidden isolate">
+              <Bamboo className="-right-2 -top-3 w-48 sm:w-56 opacity-75" />
               <div className="flex items-center justify-between gap-3">
                 <p className="text-[13px] text-ink-2">Your Next Trip</p>
                 {/* phones have no sidebar, so the trip switcher lives here */}

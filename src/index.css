@@ -49,14 +49,25 @@ h1, h2, h3, .font-serif { font-family: var(--font-serif); }
   box-shadow: 0 1px 2px rgba(60, 50, 30, 0.04), 0 6px 18px -12px rgba(60, 50, 30, 0.18);
 }
 
-/* seigaiha wave pattern used at the bottom of sidebars */
+/* painted seigaiha waves at the foot of sidebars: anchored to the bottom, fading in from the top */
 .tl-waves {
-  background-image: radial-gradient(circle at 50% 100%, transparent 9px, #e3dccb 10px, #e3dccb 11px, transparent 12px),
-    radial-gradient(circle at 50% 100%, transparent 15px, #e3dccb 16px, #e3dccb 17px, transparent 18px),
-    radial-gradient(circle at 50% 100%, transparent 21px, #e3dccb 22px, #e3dccb 23px, transparent 24px);
-  background-size: 48px 24px;
-  background-position: 0 0;
-  opacity: 0.55;
+  background: url('./assets/waves.webp') bottom center / max(100%, 230px) auto no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 55%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 55%);
+  opacity: 0.85;
+}
+
+/* wash under hero headings so they read clearly over the painted hills */
+.tl-hero-veil {
+  background:
+    linear-gradient(90deg, rgba(253, 243, 230, 0.9) 0%, rgba(253, 243, 230, 0.72) 30%, rgba(253, 243, 230, 0) 62%),
+    linear-gradient(180deg, rgba(253, 243, 230, 0) 45%, rgba(253, 243, 230, 0.55) 100%);
+}
+@media (max-width: 639px) {
+  /* on phones the heading spans the full width, so the wash does too */
+  .tl-hero-veil {
+    background: linear-gradient(180deg, rgba(253, 243, 230, 0.5) 0%, rgba(253, 243, 230, 0.78) 55%, rgba(253, 243, 230, 0.9) 100%);
+  }
 }
 
 /* orange brush underline under hero titles */

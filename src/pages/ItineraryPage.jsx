@@ -443,7 +443,7 @@ function Itinerary(ctx) {
           );
         })}
       </div>
-      <div className="tl-waves h-16 mt-3 -mx-3 -mb-3" />
+      <div className="tl-waves h-24 mt-1 -mx-3 -mb-3" />
     </Card>
   );
 

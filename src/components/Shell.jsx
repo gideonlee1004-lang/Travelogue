@@ -1,5 +1,7 @@
 import React from 'react';
 import { Home, Bookmark, CalendarDays, Plane, User, Bell, ChevronRight } from 'lucide-react';
+import heroArt from '../assets/hero.webp';
+import bambooArt from '../assets/bamboo.webp';
 
 export const NAV_ITEMS = [
   { key: 'overview', label: 'Overview', Icon: Home },
@@ -93,55 +95,22 @@ export function TopNav({ page, onNavigate, user, notifications = 0, onBell, onAv
   );
 }
 
-/* ---------- Hero artwork: ink-wash hills, sun, blossom branch ---------- */
-export function HeroArt({ className = '' }) {
-  const blossoms = [
-    [1140, 54, 9], [1172, 38, 8], [1204, 70, 10], [1236, 46, 8], [1262, 82, 9], [1292, 60, 8],
-    [1318, 96, 9], [1350, 72, 10], [1120, 92, 7], [1196, 110, 8], [1280, 122, 7], [1340, 130, 8]
-  ];
+/* ---------- Hero artwork: the painted hills, sun and blossom branch ---------- */
+// Fills its parent. The painting keeps its upper band (blossoms, sun, ridgelines) in view at
+// any shape of card; `veil` lays a soft wash under the left side so headings stay readable.
+export function HeroArt({ className = '', veil = true }) {
   return (
-    <svg viewBox="0 0 1400 200" preserveAspectRatio="xMidYMid slice" className={`absolute inset-0 w-full h-full ${className}`} aria-hidden="true">
-      <defs>
-        <linearGradient id="hero-bg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#fbf8f1" />
-          <stop offset="1" stopColor="#f3eee2" />
-        </linearGradient>
-        <radialGradient id="hero-sun" cx="50%" cy="50%" r="50%">
-          <stop offset="0" stopColor="#e9a070" stopOpacity="0.95" />
-          <stop offset="0.7" stopColor="#e7a476" stopOpacity="0.85" />
-          <stop offset="1" stopColor="#e7a476" stopOpacity="0.3" />
-        </radialGradient>
-        <filter id="hero-blur"><feGaussianBlur stdDeviation="0.6" /></filter>
-      </defs>
-      <rect width="1400" height="200" fill="url(#hero-bg)" />
-
-      {/* distant hills */}
-      <path d="M-20 170 C120 120 220 150 330 118 C420 92 500 130 600 108 C690 90 760 140 860 118 C960 96 1040 150 1160 120 C1260 96 1340 130 1420 118 L1420 200 L-20 200 Z" fill="#c9d3bd" opacity="0.4" filter="url(#hero-blur)" />
-      <path d="M-20 185 C100 150 200 170 300 150 C400 130 470 175 580 150 C690 126 760 170 880 148 C980 130 1060 175 1180 150 C1280 130 1340 165 1420 150 L1420 200 L-20 200 Z" fill="#b2bfa3" opacity="0.4" />
-      <path d="M-20 200 C120 178 220 190 340 176 C440 164 540 190 640 176 C740 162 820 192 940 176 C1040 164 1140 190 1240 176 C1320 166 1380 184 1420 178 L1420 200 Z" fill="#9aa889" opacity="0.35" />
-      {/* faint far ridge */}
-      <path d="M520 110 C600 70 680 90 760 72 C830 58 880 90 960 80" fill="none" stroke="#b9c3ab" strokeWidth="6" strokeLinecap="round" opacity="0.5" filter="url(#hero-blur)" />
-
-      {/* sun */}
-      <circle cx="690" cy="62" r="34" fill="url(#hero-sun)" className="max-lg:hidden" />
-
-      {/* blossom branch */}
-      <g>
-        <path d="M1400 20 C1330 28 1290 60 1250 70 C1210 80 1160 60 1110 86" fill="none" stroke="#7a5a44" strokeWidth="4" strokeLinecap="round" />
-        <path d="M1310 46 C1290 70 1300 100 1278 128" fill="none" stroke="#7a5a44" strokeWidth="3" strokeLinecap="round" />
-        <path d="M1225 76 C1210 96 1190 104 1180 130" fill="none" stroke="#7a5a44" strokeWidth="2.5" strokeLinecap="round" />
-        <path d="M1350 40 C1340 58 1352 84 1334 108" fill="none" stroke="#7a5a44" strokeWidth="2.5" strokeLinecap="round" />
-        {blossoms.map(([x, y, r], i) => (
-          <g key={i} transform={`translate(${x} ${y})`}>
-            {[0, 72, 144, 216, 288].map(a => (
-              <ellipse key={a} cx="0" cy={-r * 0.55} rx={r * 0.42} ry={r * 0.62} fill={i % 3 === 0 ? '#e58a63' : '#ee9f7a'} transform={`rotate(${a})`} />
-            ))}
-            <circle r={r * 0.22} fill="#f6d9c3" />
-          </g>
-        ))}
-      </g>
-    </svg>
+    <div className={`absolute inset-0 overflow-hidden ${className}`} aria-hidden="true">
+      <img src={heroArt} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover select-none" style={{ objectPosition: '72% 12%' }} />
+      {veil && <div className="absolute inset-0 tl-hero-veil" />}
+    </div>
   );
+}
+
+/* ---------- Bamboo: a corner ornament. Position and size it with classes. ---------- */
+// Add `isolate` to the card it sits in; the bamboo then stays behind the card's content.
+export function Bamboo({ className = '' }) {
+  return <img src={bambooArt} alt="" aria-hidden="true" draggable={false} className={`absolute -z-10 pointer-events-none select-none ${className}`} />;
 }
 
 /* ---------- Hero band ---------- */

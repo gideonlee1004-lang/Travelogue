@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import {
   Search, SlidersHorizontal, Bookmark, Map as MapIcon, List, Plus, Users, ChevronRight, CalendarDays, Layers, Download,
-  Sparkles, RefreshCw, Plane, MoreHorizontal, Leaf
+  Sparkles, RefreshCw, Plane, MoreHorizontal
 } from 'lucide-react';
-import { Hero, Card, Chip, SectionTitle, Btn, EmptyNote, IconBadge, WavesFooter } from '../components/Shell.jsx';
+import { Hero, Card, Chip, SectionTitle, Btn, EmptyNote, IconBadge, WavesFooter, Bamboo } from '../components/Shell.jsx';
 import { PlaceCard } from '../components/PlaceCard.jsx';
 import { PlacePhoto } from '../components/PlacePhoto.jsx';
 import { TripMap } from '../components/TripMap.jsx';
@@ -169,8 +169,8 @@ export default function SavedPlacesPage(ctx) {
             )}
           </Card>
 
-          <Card className="p-4 relative overflow-hidden">
-            <Leaf className="absolute -right-3 -top-3 w-20 h-20 text-sage/15" strokeWidth={1} />
+          <Card className="p-4 relative overflow-hidden isolate">
+            <Bamboo className="-right-2 -top-3 w-40 opacity-75" />
             <h3 className="font-serif text-[20px] text-ink mb-3">Quick Actions</h3>
             <div className="space-y-1">
               {[

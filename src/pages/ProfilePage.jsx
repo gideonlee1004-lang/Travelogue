@@ -3,7 +3,7 @@ import {
   User, Settings, Bell, Languages, ChevronRight, ChevronDown, Camera, BadgeCheck, Briefcase, Globe2, Bookmark, Users,
   CalendarDays, MapPin, BedDouble, Gauge, Car, Sun, Hourglass, Pen, LogOut, Mail, Check, Plus, Mountain, Trash2, CloudOff, Cloud
 } from 'lucide-react';
-import { HeroArt, Card, Btn, EmptyNote, Avatar } from '../components/Shell.jsx';
+import { HeroArt, Bamboo, Card, Btn, EmptyNote, Avatar } from '../components/Shell.jsx';
 import { CoverImage, PlacePhoto } from '../components/PlacePhoto.jsx';
 import { INTEREST_CHIPS, cityOf } from '../theme.js';
 import { formatRange, fileToAvatar } from '../lib/helpers.js';
@@ -266,7 +266,10 @@ export default function ProfilePage(ctx) {
               {section !== m.key && <ChevronRight className="w-4 h-4 text-ink-3" />}
             </button>
           ))}
-          <div className="tl-waves h-20 mt-4 -mx-2 -mb-2" />
+          <div className="relative isolate h-36 mt-2 -mx-2 -mb-2">
+            <div className="tl-waves absolute inset-0" />
+            <Bamboo className="left-0 bottom-0 w-40 -scale-x-100 opacity-80" />
+          </div>
         </Card>
 
         {/* ---------- Centre ---------- */}

@@ -1595,7 +1595,7 @@ export default function App() {
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-cream text-ink flex flex-col justify-center items-center px-4 py-8 sm:py-12 font-sans relative overflow-hidden">
-        <div className="absolute inset-x-0 top-0 h-[260px] opacity-90"><HeroArt /></div>
+        <div className="absolute inset-x-0 top-0 h-[300px] [mask-image:linear-gradient(to_bottom,#000_55%,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,#000_55%,transparent)]"><HeroArt veil={false} /></div>
         <div className="relative w-full max-w-md tl-card p-6 sm:p-8 space-y-6 mt-16">
           <div className="text-center space-y-1">
             <BrandMark className="w-14 h-12 mx-auto" />
