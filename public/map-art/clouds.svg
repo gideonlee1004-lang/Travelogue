@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 270 125">
- <defs><filter id="blur"><feGaussianBlur stdDeviation="4"/></filter></defs>
- <g fill="#fffdf1" opacity=".54" filter="url(#blur)">
-  <path d="M5 79q20-28 49-20 7-40 44-42 25 1 34 26 34-10 50 18 31-8 47 24 20-4 33 18H2z"/>
- </g>
- <path d="M5 84q20-25 49-18 7-36 44-37 25 1 34 23 34-9 50 17 31-8 47 22 20-4 33 17H2z" fill="#fffef3" opacity=".7"/>
-</svg>
