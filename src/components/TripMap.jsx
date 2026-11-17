@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GoogleMap, MarkerF, PolylineF } from '@react-google-maps/api';
-import { Plus, Minus, LocateFixed, Maximize2 } from 'lucide-react';
+import { Plus, Minus, LocateFixed, Maximize2, Layers3, Check, ChevronDown } from 'lucide-react';
 import { MAP_OPTIONS, pinForPlace, flightPin, stayPin, shortName, COLORS } from '../theme.js';
+import { createWatercolorMapType, setWatercolorOverlay, MAP_MODES, MAP_MODE_STORAGE_KEY, readMapMode, WATERCOLOR_TILE_MAX_ZOOM } from '../lib/watercolorMap.js';
 import { getCurvedPath } from '../lib/helpers.js';
 
 const CONTAINER = { width: '100%', height: '100%' };
+const MAP_MODE_NAMES = { watercolor: 'Watercolor', street: 'Street Map', satellite: 'Satellite' };
+const mapStorage = () => (typeof window === 'undefined' ? null : window.localStorage);
 const hasCoords = o => o && o.lat != null && o.lng != null && !Number.isNaN(Number(o.lat)) && !Number.isNaN(Number(o.lng));
 const ll = o => ({ lat: Number(o.lat), lng: Number(o.lng) });
 
@@ -63,8 +66,36 @@ export function TripMap({
 }) {
   const [map, setMap] = useState(null);
   const [zoomLevel, setZoomLevel] = useState(zoom);
+  const [mapMode, setMapMode] = useState(() => readMapMode(mapStorage()));
+  const [mapMenuOpen, setMapMenuOpen] = useState(false);
+  const [tileNotice, setTileNotice] = useState('');
   const mapRef = useRef(null);
-  const onLoad = useCallback(m => { mapRef.current = m; setMap(m); }, []);
+  const watercolorLayerRef = useRef(null);
+  const failedTileCount = useRef(0);
+  const onTileError = useCallback(() => {
+    failedTileCount.current += 1;
+    // A few isolated missing Stamen tiles should not disable the entire map.
+    // If the tile provider is inaccessible (e.g. missing domain authorization),
+    // restore a full, navigable Google road map rather than showing empty tiles.
+    if (failedTileCount.current >= 3) {
+      setTileNotice('Watercolor tiles unavailable. Showing the street map. Configure Stadia Maps domain access to enable watercolor.');
+      setMapMode('street');
+    }
+  }, []);
+  const onLoad = useCallback(m => {
+    mapRef.current = m;
+    failedTileCount.current = 0;
+    const g = window.google;
+    if (g?.maps) {
+      watercolorLayerRef.current = createWatercolorMapType(g, {
+        apiKey: import.meta.env.VITE_STADIA_MAPS_API_KEY || '',
+        onTileError
+      });
+    }
+    setMap(m);
+    const loadedZoom = m.getZoom();
+    if (typeof loadedZoom === 'number') setZoomLevel(loadedZoom);
+  }, [onTileError]);
   // The map component re-centres whenever it is handed a new `center` object, and callers
   // build that object afresh on every render. Left alone, any re-render after zooming to
   // the day's stops would drag the view back to the trip's centre. So the map only ever
@@ -75,8 +106,55 @@ export function TripMap({
     const z = mapRef.current?.getZoom?.();
     if (typeof z === 'number') setZoomLevel(prev => (prev === z ? prev : z));
   }, []);
-  const onUnmount = useCallback(() => setMap(null), []);
+  const onUnmount = useCallback(() => {
+    setWatercolorOverlay(mapRef.current, watercolorLayerRef.current, false);
+    watercolorLayerRef.current = null;
+    mapRef.current = null;
+    setMap(null);
+  }, []);
   const lastFit = useRef('');
+
+  const watercolorVisible = mapMode === 'watercolor' && zoomLevel <= WATERCOLOR_TILE_MAX_ZOOM;
+  const detailedZoom = mapMode === 'watercolor' && zoomLevel > WATERCOLOR_TILE_MAX_ZOOM;
+  // Never suppress Google's default airport runways, taxiways, POIs, street names,
+  // transit or road geometry. The custom artwork is transparent on TOP of them.
+  const mapOptions = useMemo(() => ({ ...MAP_OPTIONS, styles: [] }), []);
+
+  useEffect(() => {
+    if (!map) return;
+    const nextType = mapMode === 'satellite' ? 'satellite' : 'roadmap';
+    if (map.getMapTypeId() !== nextType) map.setMapTypeId(nextType);
+    setWatercolorOverlay(map, watercolorLayerRef.current, watercolorVisible);
+    return () => setWatercolorOverlay(map, watercolorLayerRef.current, false);
+  }, [map, mapMode, watercolorVisible]);
+
+  useEffect(() => {
+    const sync = event => {
+      if (event.type === 'storage' && event.key !== MAP_MODE_STORAGE_KEY) return;
+      const selected = event.type === 'storage' ? readMapMode(mapStorage()) : event.detail?.mode;
+      if (MAP_MODES.includes(selected)) {
+        setMapMode(selected);
+        setTileNotice('');
+        failedTileCount.current = 0;
+      }
+    };
+    window.addEventListener('storage', sync);
+    window.addEventListener('tl-map-mode-changed', sync);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener('tl-map-mode-changed', sync);
+    };
+  }, []);
+
+  const chooseMapMode = useCallback(mode => {
+    if (!MAP_MODES.includes(mode)) return;
+    setMapMode(mode);
+    setMapMenuOpen(false);
+    setTileNotice('');
+    failedTileCount.current = 0;
+    try { window.localStorage.setItem(MAP_MODE_STORAGE_KEY, mode); } catch { /* private browsing */ }
+    window.dispatchEvent(new CustomEvent('tl-map-mode-changed', { detail: { mode } }));
+  }, []);
 
   // The same stay is usually pinned to several nights; draw it once. And when the hotel
   // is also a stop that day, the stop's pin already marks it.
@@ -150,14 +228,14 @@ export function TripMap({
 
   let order = 0;
   return (
-    <div className={`${/\babsolute\b/.test(className) ? '' : 'relative'} overflow-hidden bg-[#f1ead9] ${className}`} style={{ minHeight: 160 }}>
+    <div className={`${/\babsolute\b/.test(className) ? '' : 'relative'} overflow-hidden bg-[#e7eee9] ${className}`} style={{ minHeight: 160 }}>
       {loadError ? (
         <div className="absolute inset-0 flex items-center justify-center text-xs text-ink-3 p-4 text-center">The map could not be loaded. Check your connection and reload the page.</div>
       ) : !isLoaded ? (
         <div className="absolute inset-0 flex items-center justify-center text-xs text-ink-3">Loading map…</div>
       ) : (
         <div className="absolute inset-0">
-          <GoogleMap mapContainerStyle={CONTAINER} center={startCenter} zoom={zoom} options={MAP_OPTIONS} onLoad={onLoad} onUnmount={onUnmount} onZoomChanged={syncZoom} onIdle={syncZoom}>
+          <GoogleMap mapContainerStyle={CONTAINER} center={startCenter} zoom={zoom} options={mapOptions} onLoad={onLoad} onUnmount={onUnmount} onZoomChanged={syncZoom} onIdle={syncZoom}>
             {lines.map((seg, i) => (
               <React.Fragment key={`seg_${i}_${seg.road ? 'r' : 's'}_${seg.path.length}`}>
                 {seg.road && <PolylineF path={seg.path} options={ROAD_CASING} />}
@@ -204,8 +282,62 @@ export function TripMap({
         </div>
       )}
 
+      {/* Decorative Japanese travel-journal art is anchored to the viewport,
+          not falsely georeferenced to a particular country. It never takes
+          pointer events, so dragging, zooming and clicking remain functional. */}
+      {isLoaded && !loadError && watercolorVisible && (
+        <div className={`tl-watercolor-art ${zoomLevel >= 11 ? 'tl-watercolor-art--detail' : ''}`} aria-hidden="true">
+          <img className="tl-watercolor-sakura" src="/map-art/sakura.svg" alt="" />
+          <img className="tl-watercolor-bamboo" src="/map-art/bamboo.svg" alt="" />
+          <img className="tl-watercolor-cloud" src="/map-art/clouds.svg" alt="" />
+        </div>
+      )}
+
       {controls && isLoaded && !loadError && (
-        <div className="absolute right-2.5 bottom-2.5 flex flex-col gap-1.5">
+        <div className="absolute left-2.5 top-2.5 z-20 max-w-[calc(100%-5rem)]">
+          <button
+            type="button"
+            onClick={() => setMapMenuOpen(value => !value)}
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[#d9cbb7] bg-[#fff9ee]/95 px-3 text-[11px] font-semibold text-[#554935] shadow-md backdrop-blur-sm cursor-pointer"
+            aria-label="Choose map style" aria-haspopup="true" aria-expanded={mapMenuOpen}
+            title="Map appearance"
+          >
+            <Layers3 className="h-4 w-4 text-[#a96a3f]" />
+            <span>{MAP_MODE_NAMES[mapMode]}</span>
+            <ChevronDown className="h-3 w-3" />
+          </button>
+          {mapMenuOpen && (
+            <div className="mt-1.5 w-36 rounded-xl border border-[#d9cbb7] bg-[#fffaf0] p-1 shadow-lg">
+              {MAP_MODES.map(mode => (
+                <button
+                  type="button" key={mode} onClick={() => chooseMapMode(mode)}
+                  className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-[12px] text-[#554935] hover:bg-[#f1e8d6] cursor-pointer"
+                  aria-pressed={mapMode === mode}
+                >
+                  {MAP_MODE_NAMES[mode]}
+                  {mapMode === mode && <Check className="h-3.5 w-3.5 text-[#61764b]" />}
+                </button>
+              ))}
+            </div>
+          )}
+          {detailedZoom && <p className="mt-1 max-w-44 rounded-lg bg-[#fff9ee]/90 px-2 py-1 text-[10px] text-[#695943] shadow-sm">Full Google map detail at close zoom</p>}
+        </div>
+      )}
+      {tileNotice && isLoaded && !loadError && (
+        <div className="absolute bottom-11 left-2.5 z-10 max-w-[calc(100%-5rem)] rounded-lg bg-[#fff9ee]/95 px-2.5 py-1.5 text-[10px] text-[#74512c] shadow-sm" role="status">
+          {tileNotice}
+        </div>
+      )}
+      {isLoaded && !loadError && watercolorVisible && (
+        <div className="tl-watercolor-attribution">
+          © <a href="https://stadiamaps.com/attribution/" target="_blank" rel="noopener noreferrer">Stadia Maps</a>
+          {' · '}<a href="https://stamen.com/" target="_blank" rel="noopener noreferrer">Stamen Design</a>
+          {' · '}<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>
+        </div>
+      )}
+
+      {controls && isLoaded && !loadError && (
+        <div className="absolute right-2.5 bottom-2.5 z-20 flex flex-col gap-1.5">
           {onExpand && (
             <button onClick={onExpand} className="w-9 h-9 rounded-lg bg-paper/95 border border-line shadow-sm flex items-center justify-center text-ink-2 hover:text-ink cursor-pointer" title="Open larger map" aria-label="Open larger map">
               <Maximize2 className="w-4 h-4" />

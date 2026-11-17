@@ -141,3 +141,68 @@ button:focus-visible, a:focus-visible, label:focus-within > select { outline: 2p
   html { scroll-behavior: auto; }
   .tl-fade { animation: none; }
 }
+
+/* Real worldwide watercolor map. Artwork is deliberately non-interactive:
+   markers, polylines, panning, zooming and Places selection remain usable. */
+.tl-watercolor-art {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.tl-watercolor-art::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: .13;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 250 250'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.45' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+}
+.tl-watercolor-sakura {
+  position: absolute;
+  top: -12px;
+  right: -20px;
+  width: clamp(130px, 29%, 290px);
+  opacity: .91;
+  filter: drop-shadow(0 2px 3px rgba(105,78,42,.06));
+}
+.tl-watercolor-bamboo {
+  position: absolute;
+  bottom: -38px;
+  left: -32px;
+  width: clamp(85px, 17%, 155px);
+  opacity: .78;
+}
+.tl-watercolor-cloud {
+  position: absolute;
+  top: 7%;
+  left: 25%;
+  width: clamp(92px, 20%, 220px);
+  opacity: .53;
+}
+/* Decorative corners become faint around airports, roads and detailed POIs. */
+.tl-watercolor-art--detail .tl-watercolor-sakura,
+.tl-watercolor-art--detail .tl-watercolor-bamboo,
+.tl-watercolor-art--detail .tl-watercolor-cloud { opacity: .12; }
+.tl-watercolor-art--detail::before { opacity: .035; }
+.tl-watercolor-attribution {
+  position: absolute;
+  bottom: 27px;
+  left: 8px;
+  z-index: 9;
+  max-width: calc(100% - 82px);
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: rgba(255, 251, 242, .81);
+  color: #665b4f;
+  font: 9px/1.35 Inter, system-ui, sans-serif;
+  pointer-events: auto;
+}
+.tl-watercolor-attribution a { text-decoration: underline; text-underline-offset: 1px; }
+@media (max-width: 480px) {
+  .tl-watercolor-sakura { right: -24px; top: -12px; width: 152px; opacity: .8; }
+  .tl-watercolor-bamboo { left: -42px; bottom: -37px; width: 105px; opacity: .64; }
+  .tl-watercolor-cloud { top: 22%; left: 15%; width: 105px; opacity: .39; }
+  .tl-watercolor-attribution { font-size: 8px; max-width: calc(100% - 78px); }
+}
