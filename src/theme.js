@@ -88,38 +88,12 @@ export function cityOf(place) {
   return s.split(',').pop()?.trim() || s;
 }
 
-// Soft, muted map that sits inside the cream UI.
-export const MAP_STYLE = [
-  { elementType: 'geometry', stylers: [{ color: '#f1ead9' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#6b6354' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#f8f4ec' }, { weight: 2 }] },
-  { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#d9d1bf' }] },
-  { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
-  { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#ebe4cf' }] },
-  { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#f3ecdb' }] },
-  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#d6dec3' }, { visibility: 'on' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e6dfd0' }] },
-  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#8a8375' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#f4dcc1' }] },
-  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#e8c7a4' }] },
-  { featureType: 'road.arterial', elementType: 'labels', stylers: [{ visibility: 'simplified' }] },
-  { featureType: 'road.local', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit.line', elementType: 'geometry', stylers: [{ color: '#ded5c1' }, { visibility: 'on' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#cfdad6' }] },
-  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#7c93a3' }] }
-];
-
+// Google's standard map look; only the built-in controls are hidden (the app draws its own).
 export const MAP_OPTIONS = {
   disableDefaultUI: true,
   zoomControl: false,
   clickableIcons: false,
-  gestureHandling: 'greedy',
-  styles: MAP_STYLE,
-  backgroundColor: '#f1ead9'
+  gestureHandling: 'greedy'
 };
 
 // --- Pins -------------------------------------------------------------------
