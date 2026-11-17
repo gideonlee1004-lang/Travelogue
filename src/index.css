@@ -1,0 +1,143 @@
+@import "tailwindcss";
+
+/* ---- Travelogue design tokens (watercolour / Japanese-garden palette) ---- */
+@theme {
+  --font-serif: "Source Serif 4", "Playfair Display", Georgia, serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+
+  --color-cream: #f8f4ec;        /* page background */
+  --color-cream-2: #f3eee3;      /* sidebar / soft panels */
+  --color-paper: #fffdf8;        /* cards */
+  --color-line: #e6dfd0;         /* hairlines */
+  --color-line-2: #d9d1bf;
+
+  --color-ink: #2d2924;          /* primary text */
+  --color-ink-2: #5a544a;        /* secondary text */
+  --color-ink-3: #8a8375;        /* muted text */
+
+  --color-sage: #6f7f5c;         /* primary green */
+  --color-sage-deep: #55663f;    /* dark green buttons */
+  --color-sage-soft: #e4e9d9;    /* pill highlight */
+  --color-sage-mist: #eef1e6;
+
+  --color-clay: #d9823b;         /* terracotta accent */
+  --color-clay-deep: #c3642a;
+  --color-clay-soft: #f7e3d1;
+
+  --color-sky-soft: #e4ebe9;
+  --color-sand: #efe6d3;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  background-color: var(--color-cream);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .font-serif { font-family: var(--font-serif); }
+
+/* soft card */
+.tl-card {
+  background: var(--color-paper);
+  border: 1px solid var(--color-line);
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px rgba(60, 50, 30, 0.04), 0 6px 18px -12px rgba(60, 50, 30, 0.18);
+}
+
+/* painted seigaiha waves at the foot of sidebars: anchored to the bottom, fading in from the top */
+.tl-waves {
+  background: url('./assets/waves.webp') bottom center / max(100%, 230px) auto no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 55%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 55%);
+  opacity: 0.85;
+}
+
+/* wash under hero headings so they read clearly over the painted hills */
+.tl-hero-veil {
+  background:
+    linear-gradient(90deg, rgba(253, 243, 230, 0.9) 0%, rgba(253, 243, 230, 0.72) 30%, rgba(253, 243, 230, 0) 62%),
+    linear-gradient(180deg, rgba(253, 243, 230, 0) 45%, rgba(253, 243, 230, 0.55) 100%);
+}
+@media (max-width: 639px) {
+  /* on phones the heading spans the full width, so the wash does too */
+  .tl-hero-veil {
+    background: linear-gradient(180deg, rgba(253, 243, 230, 0.5) 0%, rgba(253, 243, 230, 0.78) 55%, rgba(253, 243, 230, 0.9) 100%);
+  }
+}
+
+/* orange brush underline under hero titles */
+.tl-underline { position: relative; display: inline-block; }
+.tl-underline::after {
+  content: "";
+  position: absolute;
+  left: 0.05em;
+  right: 0.3em;
+  bottom: -0.08em;
+  height: 0.16em;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--color-clay) 0%, #e39a5b 100%);
+  opacity: 0.9;
+}
+
+/* timeline line */
+.tl-timeline::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.6rem;
+  bottom: 0.6rem;
+  border-left: 2px dashed var(--color-line-2);
+}
+
+/* thin scrollbars */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #ddd5c4; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #cbc2ad; }
+
+/* hide the default google map focus outline */
+.gm-style iframe + div { border: none !important; }
+
+/* progress bars */
+.tl-progress { height: 8px; border-radius: 999px; background: #e8e2d4; overflow: hidden; }
+.tl-progress > span { display: block; height: 100%; border-radius: 999px; background: var(--color-sage); }
+
+@keyframes tl-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.tl-fade { animation: tl-fade 0.25s ease-out both; }
+
+/* name under a map pin */
+.tl-pin-label {
+  background: rgba(255, 253, 248, 0.94);
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  padding: 1px 7px 2px;
+  box-shadow: 0 1px 2px rgba(60, 50, 30, 0.12);
+  white-space: nowrap;
+  line-height: 1.35;
+}
+
+/* phones: keep the bottom tab bar clear of the home indicator */
+.tl-safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.tl-page-bottom { padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px)); }
+@media (min-width: 1024px) { .tl-page-bottom { padding-bottom: 0; } }
+
+/* horizontal strips that scroll without showing a scrollbar */
+.tl-strip { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.tl-strip::-webkit-scrollbar { display: none; }
+
+/* inputs must be 16px on phones or iOS zooms the page when they are focused */
+@media (max-width: 639px) {
+  input, select, textarea { font-size: 16px; }
+}
+
+button:focus-visible, a:focus-visible, label:focus-within > select { outline: 2px solid var(--color-sage); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .tl-fade { animation: none; }
+}
